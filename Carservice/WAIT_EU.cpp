@@ -27,7 +27,7 @@ int WAIT_EU::getTotalServiceTime()
 	{
 		Car* c;
 		this->dequeue(c);
-		sum += c->getServiceTimeFor(SVC_MU);
+		sum += c->getServiceTimeFor(SVC_EU);
 		this->enqueue(c);
 	}
 	return sum;

@@ -35,6 +35,7 @@
     <ClInclude Include="..\REDY_List.h" />
     <ClInclude Include="WAIT_EU.h" />
     <ClInclude Include="WAIT_MU.h" />
+    <ClInclude Include="WAIT_WU.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp">
@@ -42,6 +43,7 @@
     </ClCompile>
     <ClCompile Include="WAIT_EU.cpp" />
     <ClCompile Include="WAIT_MU.cpp" />
+    <ClCompile Include="WAIT_WU.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
