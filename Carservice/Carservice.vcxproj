@@ -31,9 +31,11 @@
     <ClInclude Include="..\IDLE_List.h" />
     <ClInclude Include="..\Late_List.h" />
     <ClInclude Include="..\REDY_List.h" />
+    <ClInclude Include="ServiceWaitQueue.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp" />
+    <ClCompile Include="ServiceWaitQueue.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
