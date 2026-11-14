@@ -15,40 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Car.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\ERLY_List.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\IDLE_List.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Late_List.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\REDY_List.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\headerfiles\ArrayStack.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\headerfiles\Node.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\headerfiles\priNode.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\headerfiles\priQueue.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\headerfiles\Queue.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\headerfiles\QueueLinked.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\headerfiles\Stack.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="WAIT_MU.h">
@@ -60,11 +27,50 @@
     <ClInclude Include="WAIT_WU.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ArrayStack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Node.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PriNode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PriQueue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Queue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Stack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="REDY_List.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ERLY_List.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IDLE_List.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Late_List.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Bay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Center.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ListPrinters.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Car.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="WAIT_MU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -72,6 +78,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="WAIT_WU.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Center.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

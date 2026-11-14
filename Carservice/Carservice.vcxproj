@@ -19,28 +19,30 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Car.h" />
-    <ClInclude Include="..\ERLY_List.h" />
-    <ClInclude Include="..\headerfiles\ArrayStack.h" />
-    <ClInclude Include="..\headerfiles\Node.h" />
-    <ClInclude Include="..\headerfiles\priNode.h" />
-    <ClInclude Include="..\headerfiles\priQueue.h" />
-    <ClInclude Include="..\headerfiles\Queue.h" />
     <ClInclude Include="..\headerfiles\QueueLinked.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClInclude>
-    <ClInclude Include="..\headerfiles\Stack.h" />
-    <ClInclude Include="..\IDLE_List.h" />
-    <ClInclude Include="..\Late_List.h" />
-    <ClInclude Include="..\REDY_List.h" />
+    <ClInclude Include="ArrayStack.h" />
+    <ClInclude Include="Bay.h" />
+    <ClInclude Include="Car.h" />
+    <ClInclude Include="Center.h" />
+    <ClInclude Include="ERLY_List.h" />
+    <ClInclude Include="IDLE_List.h" />
+    <ClInclude Include="Late_List.h" />
+    <ClInclude Include="ListPrinters.h" />
+    <ClInclude Include="Node.h" />
+    <ClInclude Include="PriNode.h" />
+    <ClInclude Include="PriQueue.h" />
+    <ClInclude Include="Queue.h" />
+    <ClInclude Include="REDY_List.h" />
+    <ClInclude Include="Stack.h" />
     <ClInclude Include="WAIT_EU.h" />
     <ClInclude Include="WAIT_MU.h" />
     <ClInclude Include="WAIT_WU.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\main.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-    </ClCompile>
+    <ClCompile Include="Center.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="WAIT_EU.cpp" />
     <ClCompile Include="WAIT_MU.cpp" />
     <ClCompile Include="WAIT_WU.cpp" />
