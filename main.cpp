@@ -1,4 +1,4 @@
-//salma's test
+//salma test
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
