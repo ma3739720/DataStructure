@@ -41,9 +41,9 @@ Single Node Case:
 #ifndef LINKED_QUEUE_
 #define LINKED_QUEUE_
 
-
+using namespace std;   // needed by the lab QueueLinked.h (it uses cout without std::)
 #include "Node.h"
-#include "QueueADT.h"
+#include "Queue.h"
 
 template <typename T>
 class LinkedQueue :public QueueADT<T>

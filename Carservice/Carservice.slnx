@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Carservice.vcxproj" Id="47585a47-8db8-4e06-99f9-49b93a02e716" />
+</Solution>
