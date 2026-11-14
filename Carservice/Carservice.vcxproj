@@ -33,12 +33,14 @@
     <ClInclude Include="..\IDLE_List.h" />
     <ClInclude Include="..\Late_List.h" />
     <ClInclude Include="..\REDY_List.h" />
+    <ClInclude Include="WAIT_EU.h" />
     <ClInclude Include="WAIT_MU.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="WAIT_EU.cpp" />
     <ClCompile Include="WAIT_MU.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

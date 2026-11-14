@@ -54,12 +54,18 @@
     <ClInclude Include="WAIT_MU.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="WAIT_EU.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="WAIT_MU.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WAIT_EU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
