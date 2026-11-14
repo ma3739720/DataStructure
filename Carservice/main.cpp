@@ -186,15 +186,7 @@ int main()
 
 }*/
 //Aya Test
-// Member3_test.cpp
-// TEMPORARY self-checking tests for Member 3's work. Do NOT commit it, and exclude it from the
-// real build (it has its own main()).
-//
-// Each print function's output is compared with the expected text, so you just read PASS / FAIL.
-// (std::ostringstream / std::string are used ONLY in this test file, never in the project code.)
-//
-// Needs: Member 1's Car.h (real one), the stub Bay.h (or Member 1's real one with a print() member),
-//        and ArrayStack.h with MAX_SIZE raised to at least 1100.
+
 
 #include <iostream>
 #include <sstream>
