@@ -1089,7 +1089,7 @@ namespace m4
             vipRedy.GetCount() == 1 && waitCombo.GetCount() == 1 && rmot.GetCount() == 1 &&
             rescuing.GetCount() == 1 && freeRB.GetCount() == 1);
 
-        // ---- the whole simulation with the bonus on ----
+        // ---- the whole simulation (the bonus features are part of it) ----
         int sizes[] = { 1, 10, 100, 1000 };
         for (int k = 0; k < 4; k++)
         {
@@ -1098,7 +1098,7 @@ namespace m4
             {
                 CaptureCout cap;
                 Center center;
-                center.simulate(sizes[k], false, true);
+                center.simulate(sizes[k], false);
                 fin = center.getFinishedCount();
                 can = center.getCancelledCount();
             }
@@ -1111,19 +1111,10 @@ namespace m4
         {
             CaptureCout cap;
             Center center;
-            center.simulate(300, false, true);
+            center.simulate(300, false);
             vips = center.getNumVIP(); combos = center.getNumCombo(); remotes = center.getNumRemote();
         }
-        checkTrue("bonus run generated VIP, COMBO and remote cars", vips > 0 && combos > 0 && remotes > 0);
-
-        srand(11);
-        {
-            CaptureCout cap;
-            Center center;
-            center.simulate(300, false, false);
-            vips = center.getNumVIP(); combos = center.getNumCombo(); remotes = center.getNumRemote();
-        }
-        checkTrue("with the bonus off there are no VIP, COMBO or remote cars", vips == 0 && combos == 0 && remotes == 0);
+        checkTrue("the run generated VIP, COMBO and remote cars", vips > 0 && combos > 0 && remotes > 0);
     }
 
 #ifdef _DEBUG
@@ -1143,18 +1134,8 @@ namespace m4
             center.simulate(300, false);
         }
         _CrtMemCheckpoint(&after);
+        // (the run includes combo cars that hold two bays and rescued cars that hold a van)
         checkTrue("no memory is left allocated after Center is destroyed", !_CrtMemDifference(&diff, &before, &after));
-
-        // the same with the bonus on (combo cars hold two bays, rescued cars hold a van)
-        srand(6);
-        _CrtMemCheckpoint(&before);
-        {
-            CaptureCout cap;
-            Center center;
-            center.simulate(300, false, true);
-        }
-        _CrtMemCheckpoint(&after);
-        checkTrue("no memory is left allocated after a BONUS run", !_CrtMemDifference(&diff, &before, &after));
     }
 #endif
 

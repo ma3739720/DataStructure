@@ -656,42 +656,41 @@ int main()
 // Phase 1.2 main: runs the random simulation.
 //   Carservice.exe          -> interactive: prints all lists every timestep, press a key to continue
 //   Carservice.exe auto     -> no printing, no key press: only the final summary (for quick checks)
-//   Carservice.exe nobonus  -> turn the bonus features (VIP, COMBO, Rescue Unit) OFF: plain Phase 1 only
-//                              (the bonus is ON by default; "bonus" also exists but is not needed)
-//   Carservice.exe test     -> run all the tests of the project (see Tests.cpp)
+//   Carservice.exe test    -> run all the tests of the project (see Tests.cpp)
 //   Carservice.exe [auto] N -> use N cars instead of 1000 (N must be at most 5000, the stack size)
 //
-// The old Member 1/2/3 test programs are saved in OldTests_main.cpp.txt (not compiled).
+// The old Member 1/2/3 test code is kept above (commented out). The same tests also run from Tests.cpp.
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
 #include <cstring>
 #include "Center.h"
 
-int runAllTests();     // Tests.cpp
+int runAllTests();     // defined in Tests.cpp: runs every test of the project, returns the number of failed checks
 
 int main(int argc, char* argv[])
 {
+    // "Carservice.exe test": run the tests instead of the simulation (exit code 0 = all passed)
     if (argc > 1 && std::strcmp(argv[1], "test") == 0)
         return runAllTests() == 0 ? 0 : 1;
 
+    // Default settings: interactive screen, 1000 cars.
     bool interactive = true;
-    bool withBonus = true;      // the bonus features run by default (use "nobonus" for the plain Phase 1 version)
     int numCars = 1000;
 
+    // Read the command-line words: "auto", or a number (= how many cars).
     for (int i = 1; i < argc; i++)
     {
         if (std::strcmp(argv[i], "auto") == 0) interactive = false;
-        else if (std::strcmp(argv[i], "bonus") == 0) withBonus = true;
-        else if (std::strcmp(argv[i], "nobonus") == 0) withBonus = false;
         else numCars = std::atoi(argv[i]);
     }
+    // The lab ArrayStack holds at most 5000 cars (FNSH and CNCL), so more cars would not fit.
     if (numCars < 1 || numCars > 5000) numCars = 1000;
 
-    srand((unsigned)time(0));
+    srand((unsigned)time(0));        // a different random run every time the program starts
 
-    Center center;
-    center.simulate(numCars, interactive, withBonus);
+    Center center;                   // owns all the lists and the bays
+    center.simulate(numCars, interactive);
     return 0;
 }
 
