@@ -484,6 +484,12 @@ int main()
 // Member 1 tests: Car, Service, Bay classes, printing.
 // To use: add this file to the project and temporarily exclude main.cpp
 // (or rename this main to main1). Needs only Car.h and Bay.h.
+/* ---- NOT NEEDED NOW (commented out) ----
+   Member 1's test was the only active code here and it has its own main(),
+   which cannot exist next to the simulation's main() below (only one main is allowed).
+   The same checks still run with:  Carservice.exe test   (Tests.cpp, namespace m1).
+   To run only this test: remove the comment markers here and comment out the main() below.
+
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -644,3 +650,44 @@ int main()
     cout << "\n=============================\n" << passed << " passed, " << failed << " failed" << endl;
     return failed;
 }
+---- end of Member 1's test ---- */
+
+// ===================== ACTIVE CODE: Phase 1 simulation (Member 4) =====================
+// Phase 1.2 main: runs the random simulation.
+//   Carservice.exe          -> interactive: prints all lists every timestep, press a key to continue
+//   Carservice.exe auto     -> no printing, no key press: only the final summary (for quick checks)
+//   Carservice.exe test     -> run all the tests of the project (see Tests.cpp)
+//   Carservice.exe [auto] N -> use N cars instead of 1000 (N must be at most 5000, the stack size)
+//
+// The old Member 1/2/3 test programs are saved in OldTests_main.cpp.txt (not compiled).
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <cstring>
+#include "Center.h"
+
+int runAllTests();     // Tests.cpp
+
+int main(int argc, char* argv[])
+{
+    if (argc > 1 && std::strcmp(argv[1], "test") == 0)
+        return runAllTests() == 0 ? 0 : 1;
+
+    bool interactive = true;
+    int numCars = 1000;
+
+    for (int i = 1; i < argc; i++)
+    {
+        if (std::strcmp(argv[i], "auto") == 0) interactive = false;
+        else numCars = std::atoi(argv[i]);
+    }
+    if (numCars < 1 || numCars > 5000) numCars = 1000;
+
+    srand((unsigned)time(0));
+
+    Center center;
+    center.simulate(numCars, interactive);
+    return 0;
+}
+
+

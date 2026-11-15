@@ -11,6 +11,7 @@ public:
     void InsertCar(Car* c)
     {
         Node<Car*>* newNode = new Node<Car*>(c);
+        count++;                                         // nodes are linked by hand, so keep the counter right
 
         if (isEmpty())                                  
         {
@@ -38,10 +39,7 @@ public:
    
     int getCount() const
     {
-        int count = 0;
-        for (Node<Car*>* p = frontPtr; p; p = p->getNext())
-            count++;
-        return count;
+        return GetCount();
     }
 
     // Only the first maxCount cars are printed 

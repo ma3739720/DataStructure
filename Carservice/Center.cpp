@@ -1,1 +1,351 @@
 #include "Center.h"
+#include <cstdlib>
+#include <ctime>
+#include "UI.h"
+
+// true with probability pct %
+static bool chance(int pct) { return rand() % 100 < pct; }
+
+// ------------------------------------------------------------
+Center::Center() : timestep(0), totalCars(0)
+{
+    createBays();
+}
+
+// Every car and every bay is deleted exactly once here.
+// At the end of a normal run all cars are in FNSH / CNCL and all bays are in the free lists,
+// but the loops below also work if the program is stopped in the middle of the simulation.
+Center::~Center()
+{
+    Car* c;
+    int pri;
+
+    // cars still holding a bay: free the bay with the car
+    while (DIAG_Cars.dequeue(c, pri))   { delete c->getAssignedBay(); delete c; }
+    while (InServ_cars.dequeue(c, pri)) { delete c->getAssignedBay(); delete c; }
+
+    while (IDLE_cars.dequeue(c))        delete c;
+    while (ERLY_cars.dequeue(c, pri))   delete c;
+    while (LATE_cars.dequeue(c))        delete c;
+    while (REDY_cars.dequeue(c))        delete c;
+    while (WaitMU.dequeue(c))           delete c;
+    while (WaitEU.dequeue(c))           delete c;
+    while (WaitWU.dequeue(c))           delete c;
+    while (Cancelled_cars.pop(c))       delete c;
+    while (Finished_cars.pop(c))        delete c;
+
+    DiagBay* d; MechBay* m; ElecBay* e; WashBay* w;
+    while (Free_D_List.dequeue(d))  delete d;
+    while (Free_MU_List.dequeue(m)) delete m;
+    while (Free_EU_List.dequeue(e)) delete e;
+    while (Free_WU_List.dequeue(w)) delete w;
+}
+
+// ------------------------------------------------------------
+// Bays: all of them start free, so they all go to their free list.
+void Center::createBays()
+{
+    for (int i = 1; i <= N_DU; i++) Free_D_List.enqueue(new DiagBay(i));
+    for (int i = 1; i <= N_MU; i++) Free_MU_List.enqueue(new MechBay(i));
+    for (int i = 1; i <= N_EU; i++) Free_EU_List.enqueue(new ElecBay(i));
+    for (int i = 1; i <= N_WU; i++) Free_WU_List.enqueue(new WashBay(i, WB_CAP));
+}
+
+// Random IDLE cars. InsertCar keeps the IDLE list sorted by VT even though VT is random.
+void Center::generateCars(int n)
+{
+    for (int i = 1; i <= n; i++)
+    {
+        int vt = 1 + rand() % 2000;
+        int pt = vt + rand() % 41 - 20;          // appointment time: -20 .. +20 around VT
+        if (pt < 1) pt = 1;
+        Car* c = new Car(i, pt, vt, DIAG_TIME);
+        c->setSeqType(rand() % 2 ? FS : SS);
+
+        int nServices = 1 + rand() % 3;          // 1 to 3 services
+        for (int s = 0; s < nServices; s++)
+            c->addService((ServiceType)(rand() % 3), 1 + rand() % 5);
+
+        IDLE_cars.InsertCar(c);
+    }
+    totalCars = n;
+}
+
+// ------------------------------------------------------------
+//  Moving cars to their final lists / out of bays
+// ------------------------------------------------------------
+void Center::cancelCar(Car* c)
+{
+    c->setStatus(CNCL);
+    c->setCancelTime(timestep);                  // FT = CT for a cancelled car
+    if (!Cancelled_cars.push(c))
+        std::cout << "ERROR: Cancelled_cars stack is full!\n";
+}
+
+void Center::finishCar(Car* c)
+{
+    c->setStatus(FNSH);
+    c->setFinishTime(timestep);
+    if (!Finished_cars.push(c))
+        std::cout << "ERROR: Finished_cars stack is full!\n";
+}
+
+// The car leaves the bay it points to, and the bay becomes available again.
+void Center::releaseBay(Car* c)
+{
+    Bay* b = c->getAssignedBay();
+    if (!b) return;
+    c->setAssignedBay(nullptr);
+
+    if (DiagBay* d = dynamic_cast<DiagBay*>(b))      { d->release(); Free_D_List.enqueue(d); }
+    else if (MechBay* m = dynamic_cast<MechBay*>(b)) { m->release(); Free_MU_List.enqueue(m); }
+    else if (ElecBay* e = dynamic_cast<ElecBay*>(b)) { e->release(); Free_EU_List.enqueue(e); }
+    else if (WashBay* w = dynamic_cast<WashBay*>(b))
+    {
+        bool wasFull = !w->isFree();     // a full wash bay is not in the free list
+        w->release();
+        if (wasFull) Free_WU_List.enqueue(w);
+    }
+}
+
+void Center::sendToRandomWait(Car* c)
+{
+    c->setStatus(WAIT);
+    switch (rand() % 3)
+    {
+    case 0:  WaitMU.enqueue(c); break;
+    case 1:  WaitEU.enqueue(c); break;
+    default: WaitWU.enqueue(c); break;
+    }
+}
+
+// Step 2.3 needs a random LATE car that is NOT the first one.
+// CancelRandomCar() may pick the first one, so the first car is taken out of the
+// way, a random car is cancelled from the rest, and the first car is put back in front.
+void Center::cancelRandomLateNotTop()
+{
+    Car* top;
+    if (!LATE_cars.dequeue(top)) return;
+
+    Car* victim = LATE_cars.CancelRandomCar();   // nullptr if the list only had one car
+    if (victim) cancelCar(victim);
+
+    // put the old top car back in front: add it at the back, then rotate the others behind it
+    int rest = LATE_cars.getCount();
+    LATE_cars.enqueue(top);
+    Car* c;
+    for (int i = 0; i < rest; i++)
+    {
+        LATE_cars.dequeue(c);
+        LATE_cars.enqueue(c);
+    }
+}
+
+// ------------------------------------------------------------
+//  The simulation steps
+// ------------------------------------------------------------
+
+// 2.1  Top 50 cars of IDLE are distributed randomly on LATE, ERLY and REDY.
+void Center::step_IdleToLists()
+{
+    for (int i = 0; i < 50; i++)
+    {
+        Car* c;
+        if (!IDLE_cars.dequeue(c)) break;
+        switch (rand() % 3)
+        {
+        case 0:  c->setStatus(LATE); LATE_cars.enqueue(c);   break;
+        case 1:  c->setStatus(ERLY); ERLY_cars.InsertCar(c); break;   // sorted by PT
+        default: c->setStatus(REDY); REDY_cars.enqueue(c);   break;
+        }
+    }
+}
+
+// 2.2  Top 6 cars of ERLY move to REDY.
+void Center::step_ErlyToRedy()
+{
+    for (int i = 0; i < 6; i++)
+    {
+        Car* c; int pri;
+        if (!ERLY_cars.dequeue(c, pri)) break;
+        c->setStatus(REDY);
+        REDY_cars.enqueue(c);
+    }
+}
+
+// 2.3  With probability 10%, one random LATE car (not the top one) is cancelled.
+void Center::step_CancelLate()
+{
+    if (chance(10))
+        cancelRandomLateNotTop();
+}
+
+// 2.4  Top 6 cars of LATE move to REDY.
+void Center::step_LateToRedy()
+{
+    for (int i = 0; i < 6; i++)
+    {
+        Car* c;
+        if (!LATE_cars.dequeue(c)) break;
+        c->setStatus(REDY);
+        REDY_cars.enqueue(c);
+    }
+}
+
+// 2.5 / 2.6  Every free diagnosis bay takes one car from REDY. Diagnosis lasts DIAG_TIME steps.
+void Center::step_RedyToDiag()
+{
+    while (!Free_D_List.isEmpty() && !REDY_cars.isEmpty())
+    {
+        DiagBay* d; Car* c;
+        Free_D_List.dequeue(d);
+        REDY_cars.dequeue(c);
+
+        d->occupy();
+        c->setAssignedBay(d);                    // the car points to its bay
+        c->setStatus(DIAG);
+        c->setBayEntryTime(timestep);
+        DIAG_Cars.enqueue(c, -(timestep + DIAG_TIME));   // earliest finish = highest priority
+    }
+}
+
+// 2.7  Cars that finished diagnosis: 20% are cancelled, the others go to a random WAIT list.
+//      Their diagnosis bay becomes free again.
+void Center::step_DiagToWait()
+{
+    Car* c; int pri;
+    while (DIAG_Cars.peek(c, pri) && -pri <= timestep)
+    {
+        DIAG_Cars.dequeue(c, pri);
+        releaseBay(c);
+        if (chance(20)) cancelCar(c);
+        else            sendToRandomWait(c);
+    }
+}
+
+// 2.8 / 2.9  6 tries: a random bay type is chosen (MB 60%, EB 30%, WB 10%). If a car is waiting
+//            for it AND a bay of that type is free, the car moves into the bay and into
+//            InServ_cars. Otherwise the car is NOT taken from its WAIT list. Service lasts SERV_TIME.
+void Center::step_WaitToServ()
+{
+    for (int i = 0; i < 6; i++)
+    {
+        int r = rand() % 100;
+        Car* c = nullptr;
+        Bay* b = nullptr;
+
+        if (r < 60)         // mechanical
+        {
+            if (WaitMU.isEmpty() || Free_MU_List.isEmpty()) continue;
+            MechBay* m; WaitMU.dequeue(c); Free_MU_List.dequeue(m);
+            m->occupy(); b = m;
+        }
+        else if (r < 90)    // electrical
+        {
+            if (WaitEU.isEmpty() || Free_EU_List.isEmpty()) continue;
+            ElecBay* e; WaitEU.dequeue(c); Free_EU_List.dequeue(e);
+            e->occupy(); b = e;
+        }
+        else                // wash (a bay holds several cars)
+        {
+            if (WaitWU.isEmpty() || Free_WU_List.isEmpty()) continue;
+            WashBay* w; WaitWU.dequeue(c); Free_WU_List.dequeue(w);
+            w->occupy(); b = w;
+            if (w->isFree()) Free_WU_List.enqueue(w);   // still has room: stays in the free list
+        }
+
+        c->setAssignedBay(b);
+        c->setStatus(SERV);
+        c->setBayEntryTime(timestep);
+        InServ_cars.enqueue(c, -(timestep + SERV_TIME));
+    }
+}
+
+// 2.10  Cars that finished service: 40% are finished (FNSH), the others wait for their
+//       next service in a random WAIT list. Their bay becomes available again.
+void Center::step_ServToFinish()
+{
+    Car* c; int pri;
+    while (InServ_cars.peek(c, pri) && -pri <= timestep)
+    {
+        InServ_cars.dequeue(c, pri);
+        c->addServiceTime(SERV_TIME);
+        releaseBay(c);
+        if (chance(40)) finishCar(c);
+        else            sendToRandomWait(c);
+    }
+}
+
+// ------------------------------------------------------------
+//  Counting and the "no car lost" self-check
+// ------------------------------------------------------------
+int Center::carsInSystem()
+{
+    return IDLE_cars.GetCount() + ERLY_cars.GetCount() + LATE_cars.GetCount()
+         + REDY_cars.GetCount() + DIAG_Cars.GetCount()
+         + WaitMU.GetCount() + WaitEU.GetCount() + WaitWU.GetCount()
+         + InServ_cars.GetCount() + Cancelled_cars.GetCount() + Finished_cars.GetCount();
+}
+
+// Every car must be in exactly one list: the total never changes.
+void Center::checkNoCarLost()
+{
+    int n = carsInSystem();
+    if (n != totalCars)
+    {
+        std::cout << "\nERROR at timestep " << timestep << ": " << n
+                  << " cars found in the lists, but " << totalCars
+                  << " were generated (a car was lost or duplicated).\n";
+        std::exit(1);
+    }
+}
+
+// ------------------------------------------------------------
+//  The Phase 1 random simulation
+// ------------------------------------------------------------
+void Center::simulate(int numCars, bool interactive)
+{
+    generateCars(numCars);
+    UI ui;
+
+    const int MAX_STEPS = 100000;    // safety net, should never be reached
+    int fnsh = 0, cncl = 0;
+
+    while (timestep < MAX_STEPS)
+    {
+        timestep++;
+
+        step_IdleToLists();      // 2.1
+        step_ErlyToRedy();       // 2.2
+        step_CancelLate();       // 2.3
+        step_LateToRedy();       // 2.4
+        step_RedyToDiag();       // 2.5, 2.6
+        step_DiagToWait();       // 2.7
+        step_WaitToServ();       // 2.8, 2.9
+        step_ServToFinish();     // 2.10
+
+        checkNoCarLost();
+
+        if (interactive)
+        {
+            ui.printAll(timestep, IDLE_cars, ERLY_cars, LATE_cars, REDY_cars,
+                        Free_D_List, DIAG_Cars, WaitMU, WaitEU, WaitWU,
+                        Free_MU_List, Free_EU_List, Free_WU_List,
+                        InServ_cars, Cancelled_cars, Finished_cars);                 // 2.11
+            ui.waitForKey();
+        }
+
+        fnsh = Finished_cars.GetCount();
+        cncl = Cancelled_cars.GetCount();
+        if (fnsh + cncl == totalCars)           // stop: all cars are in FNSH or CNCL
+            break;
+    }
+
+    std::cout << "\n===== Simulation finished =====\n"
+              << "Timesteps : " << timestep << "\n"
+              << "Cars      : " << totalCars << "\n"
+              << "FNSH      : " << fnsh << "\n"
+              << "CNCL      : " << cncl << "\n"
+              << "FNSH + CNCL == cars generated ? "
+              << (fnsh + cncl == totalCars ? "YES" : "NO") << "\n";
+}

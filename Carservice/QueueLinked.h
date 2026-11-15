@@ -51,12 +51,15 @@ class LinkedQueue :public QueueADT<T>
 protected:  //in case you need to inherit for the project
 	Node<T>* backPtr;
 	Node<T>* frontPtr;
+	int count;      // number of items in the queue (for GetCount)
 public:
 	LinkedQueue();
 	bool isEmpty() const;
 	bool enqueue(const T& newEntry);
 	bool dequeue(T& frntEntry);
 	bool peek(T& frntEntry)  const;
+	int GetCount() const;                                        // allowed project addition
+	void print(std::ostream& out, const char* sep = " ") const;  // allowed project addition
 	~LinkedQueue();
 };
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -72,6 +75,7 @@ LinkedQueue<T>::LinkedQueue()
 {
 	backPtr = nullptr;
 	frontPtr = nullptr;
+	count = 0;
 
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -109,6 +113,7 @@ bool LinkedQueue<T>::enqueue(const T& newEntry)
 		backPtr->setNext(newNodePtr); // The queue was not empty
 
 	backPtr = newNodePtr; // New node is the last node now
+	count++;
 	return true;
 } // end enqueue
 
@@ -138,6 +143,7 @@ bool LinkedQueue<T>::dequeue(T& frntEntry)
 
 	// Free memory reserved for the dequeued node
 	delete nodeToDeletePtr;
+	count--;
 
 	return true;
 }
@@ -169,17 +175,30 @@ bool LinkedQueue<T>::peek(T& frntEntry) const
 template <typename T>
 LinkedQueue<T>::~LinkedQueue()
 {
-	//Note that the cout statements here is just for learning purpose
-	//They should be normally removed from the destructor
-	cout << "\nStarting LinkedQueue destructor...";
-	cout << "\nFreeing all nodes in the queue...";
-
 	//Free all nodes in the queue
 	T temp;
 	while (dequeue(temp));
+}
 
-	cout << "\n Is LinkedQueue Empty now?? ==> " << boolalpha << isEmpty();
-	cout << "\nEnding LinkedQueue destructor..." << endl;
+// Number of items in the queue. O(1)
+template <typename T>
+int LinkedQueue<T>::GetCount() const
+{
+	return count;
+}
+
+// Prints every item from the front to the back, separated by sep. The queue is not changed.
+// Items are printed with operator<< (Car*, bay pointers, ... have one). O(n)
+template <typename T>
+void LinkedQueue<T>::print(std::ostream& out, const char* sep) const
+{
+	bool first = true;
+	for (Node<T>* p = frontPtr; p; p = p->getNext())
+	{
+		if (!first) out << sep;
+		out << p->getItem();
+		first = false;
+	}
 }
 
 #endif#pragma once

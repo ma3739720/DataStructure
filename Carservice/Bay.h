@@ -93,8 +93,21 @@ public:
     const char* getFreeTag() const { return "W"; }
 };
 
+// Bay in use ("D4", "MB9", "EB5", "WB2"): used when a car prints the bay it points to
 inline ostream& operator<<(ostream& out, const Bay* b)
 {
     b->print(out);
+    return out;
+}
+
+// Bays inside the FREE lists print in the free format ("D4", "M14", "E7", "W1(cap 3)").
+// These exact-type overloads are chosen when a LinkedQueue<MechBay*> etc. prints its items.
+inline ostream& operator<<(ostream& out, DiagBay* b) { b->printFree(out); return out; }
+inline ostream& operator<<(ostream& out, MechBay* b) { b->printFree(out); return out; }
+inline ostream& operator<<(ostream& out, ElecBay* b) { b->printFree(out); return out; }
+inline ostream& operator<<(ostream& out, WashBay* b)
+{
+    b->printFree(out);
+    out << "(cap " << b->getFreeCapacity() << ")";
     return out;
 }

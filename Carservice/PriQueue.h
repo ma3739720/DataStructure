@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include "priNode.h"
 
 
@@ -9,8 +10,9 @@ class priQueue
 {
 protected:  //in case you need to inherit for the project
     priNode<T>* head;
+    int count;      // number of items (for GetCount)
 public:
-    priQueue() : head(nullptr) {}
+    priQueue() : head(nullptr), count(0) {}
 
     ~priQueue() {
         T tmp;
@@ -21,6 +23,7 @@ public:
     //insert the new node in its correct position according to its priority
     void enqueue(const T& data, int priority) {
         priNode<T>* newNode = new priNode<T>(data, priority);
+        count++;
 
         if (head == nullptr || priority > head->getPri()) {
 
@@ -45,6 +48,7 @@ public:
         priNode<T>* temp = head;
         head = head->getNext();
         delete temp;
+        count--;
         return true;
     }
 
@@ -58,5 +62,22 @@ public:
 
     bool isEmpty() const {
         return head == nullptr;
+    }
+
+    // Number of items. O(1)   (allowed project addition)
+    int GetCount() const {
+        return count;
+    }
+
+    // Prints every item from the front, separated by sep. The queue is not changed. O(n)
+    // (allowed project addition)
+    void print(std::ostream& out, const char* sep = " ") const {
+        bool first = true;
+        int pri;
+        for (priNode<T>* p = head; p; p = p->getNext()) {
+            if (!first) out << sep;
+            out << p->getItem(pri);
+            first = false;
+        }
     }
 };

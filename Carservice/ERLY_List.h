@@ -17,21 +17,18 @@ public:
     
     int getCount() const
     {
-        int count = 0;
-        for (priNode<Car*>* p = head; p; p = p->getNext())
-            count++;
-        return count;
+        return GetCount();
     }
 
     // Remove and return a RANDOM car (not just the top one). Returns nullptr if empty.
     // Used by the early-appointment rescheduling (Presc). The other cars are untouched. O(n)
     Car* RemoveRandomCar()
     {
-        int count = getCount();
-        if (count == 0)
+        int n = getCount();
+        if (n == 0)
             return nullptr;
 
-        int k = rand() % count;                 // index of the car to remove
+        int k = rand() % n;                // index of the car to remove
 
         priNode<Car*>* prev = nullptr;
         priNode<Car*>* cur = head;
@@ -48,7 +45,8 @@ public:
 
         int pri;
         Car* chosen = cur->getItem(pri);
-        delete cur;                             // frees the node only, not the car
+        count--;                                // node removed by hand, keep the counter right
+        delete cur;                            // frees the node only, not the car
         return chosen;
     }
 

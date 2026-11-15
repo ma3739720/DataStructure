@@ -9,6 +9,7 @@
 #ifndef ARRAY_STACK_
 #define ARRAY_STACK_
 
+#include <iostream>
 #include "Stack.h"
 
  //Unless spesificed by the stack user, the default size is 100
@@ -57,6 +58,23 @@ public:
 		TopEntry = items[top];
 		return true;
 	}  // end peek
+
+	// Number of items. O(1)   (allowed project addition)
+	int GetCount() const
+	{
+		return top + 1;
+	}
+
+	// Prints from the TOP (most recent) to the bottom, separated by sep. Stack is not changed. O(n)
+	// (allowed project addition)
+	void print(std::ostream& out, const char* sep = " ") const
+	{
+		for (int i = top; i >= 0; i--)
+		{
+			out << items[i];
+			if (i > 0) out << sep;
+		}
+	}
 
 }; // end ArrayStack
 

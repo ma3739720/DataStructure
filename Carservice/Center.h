@@ -1,60 +1,92 @@
 #pragma once
-// LOCAL SKETCH ONLY, to test Member 3's lists. The real Center belongs to Member 4,
-// so do NOT commit this file. Copy the member declarations to them instead.
+// ============================================================
+//  Center (Member 4)
+//  Owns ALL the lists of the project and runs the Phase 1 random simulation.
+//  Every list stores POINTERS (Car*, bay*), never objects.
+//  Header-only: every function is inline, there is no Center.cpp.
+// ============================================================
 #include <iostream>
+#include <cstdlib>
+#include <ctime>
 #include "QueueLinked.h"
-#include "priQueue.h"
+#include "PriQueue.h"
 #include "ArrayStack.h"
 #include "Car.h"
 #include "Bay.h"
-#include "ListPrinters.h"
-// #include "WAIT_MU.h", "WAIT_EU.h", "WAIT_WU.h"   // your three wait classes
+#include "IDLE_List.h"
+#include "ERLY_List.h"
+#include "Late_List.h"
+#include "REDY_List.h"
+#include "WAIT_MU.h"
+#include "WAIT_EU.h"
+#include "WAIT_WU.h"
+#include "UI.h"
 
 class Center
 {
-    // ---- Member 3's lists, declared exactly as in the table (they start empty) ----
-    LinkedQueue<DiagBay*> Free_D_List;
-    LinkedQueue<MechBay*> Free_MU_List;
-    LinkedQueue<ElecBay*> Free_EU_List;
-    LinkedQueue<WashBay*> Free_WU_List;
-    priQueue<Car*>        DIAG_Cars;
-    priQueue<Car*>        InServ_cars;
-    ArrayStack<Car*>      Cancelled_cars;
-    ArrayStack<Car*>      Finished_cars;
-    // WAIT_MU WaitMU;  WAIT_EU WaitEU;  WAIT_WU WaitWU;
+    // ---------------- configuration (constants) ----------------
+    static const int N_DU = 3;          // diagnosis bays
+    static const int N_MU = 3;          // mechanical bays
+    static const int N_EU = 3;          // electrical bays
+    static const int N_WU = 2;          // wash bays
+    static const int WB_CAP = 3;        // cars per wash bay
+    static const int DIAG_TIME = 3;     // timesteps a car spends in diagnosis (step 2.6)
+    static const int SERV_TIME = 4;     // timesteps a car spends in service   (step 2.9)
+
+    // ---------------- the 15 lists (all hold pointers) ----------------
+    IDLE_List                IDLE_cars;        // 1
+    ERLY_List                ERLY_cars;        // 2
+    LATE_List                LATE_cars;        // 3
+    REDY_List                REDY_cars;        // 4  (FCFS)
+    LinkedQueue<DiagBay*>    Free_D_List;      // 5
+    priQueue<Car*>           DIAG_Cars;        // 6  priority = -(finish timestep)
+    WAIT_MU                  WaitMU;           // 7
+    WAIT_EU                  WaitEU;           // 8
+    WAIT_WU                  WaitWU;           // 9
+    LinkedQueue<MechBay*>    Free_MU_List;     // 10
+    LinkedQueue<ElecBay*>    Free_EU_List;     // 11
+    LinkedQueue<WashBay*>    Free_WU_List;     // 12
+    priQueue<Car*>           InServ_cars;      // 13 priority = -(finish timestep)
+    ArrayStack<Car*>         Cancelled_cars;   // 14 (CNCL)
+    ArrayStack<Car*>         Finished_cars;    // 15 (FNSH)
+
+    int timestep;       // current timestep
+    int totalCars;      // number of generated cars
+
+    // ---------------- helpers ----------------
+    void createBays();
+    void generateCars(int n);
+
+    void cancelCar(Car* c);                   // -> CNCL stack
+    void finishCar(Car* c);                   // -> FNSH stack
+    void releaseBay(Car* c);                  // car leaves its bay, bay goes back to its free list
+    void sendToRandomWait(Car* c);            // -> one of WAIT_MU / WAIT_EU / WAIT_WU
+    void cancelRandomLateNotTop();            // random LATE car except the first one -> CNCL
+
+    // one function per step of the simulation (2.1 ... 2.10)
+    void step_IdleToLists();      // 2.1
+    void step_ErlyToRedy();       // 2.2
+    void step_CancelLate();       // 2.3
+    void step_LateToRedy();       // 2.4
+    void step_RedyToDiag();       // 2.5 (+ 2.6: diagnosis lasts DIAG_TIME)
+    void step_DiagToWait();       // 2.7
+    void step_WaitToServ();       // 2.8 (+ 2.9: service lasts SERV_TIME)
+    void step_ServToFinish();     // 2.10
+
+    // counting (every DS keeps its own counter, GetCount() is O(1))
+    int carsInSystem();           // sum of all the lists that hold cars
+    void checkNoCarLost();        // aborts if carsInSystem() != totalCars
 
 public:
-    // Bays are created from the first lines of the input file:  N_DU N_MU N_EU N_WU  and  WB_Cap.
-    // Every bay starts free, so it goes straight into its free list.
-    void createBays(int nD, int nM, int nE, int nW, int washCap)
-    {
-        for (int i = 1; i <= nD; i++) Free_D_List.enqueue(new DiagBay(i));
-        for (int i = 1; i <= nM; i++) Free_MU_List.enqueue(new MechBay(i));
-        for (int i = 1; i <= nE; i++) Free_EU_List.enqueue(new ElecBay(i));
-        for (int i = 1; i <= nW; i++) Free_WU_List.enqueue(new WashBay(i, washCap));
-    }
+    Center();
+    ~Center();
 
-    // Calls Member 3's print functions (the UI class can do the same calls)
-    void printMember3Lists(std::ostream& out)
-    {
-        printFreeD(out, Free_D_List);
-        printDiagCars(out, DIAG_Cars);
-        printFreeMU(out, Free_MU_List);
-        printFreeEU(out, Free_EU_List);
-        printFreeWU(out, Free_WU_List);
-        printInServCars(out, InServ_cars);
-        printCancelled(out, Cancelled_cars);
-        printFinished(out, Finished_cars);
-    }
+    // interactive = true : print all lists each timestep and wait for a key
+    // interactive = false: no printing and no key press (used for quick checking)
+    void simulate(int numCars, bool interactive);
 
-    // At the end of the simulation every bay is free again, so deleting from the free lists
-    // frees all of them (during the run, busy bays are NOT in these lists).
-    ~Center()
-    {
-        DiagBay* d; MechBay* m; ElecBay* e; WashBay* w;
-        while (Free_D_List.dequeue(d))  delete d;
-        while (Free_MU_List.dequeue(m)) delete m;
-        while (Free_EU_List.dequeue(e)) delete e;
-        while (Free_WU_List.dequeue(w)) delete w;
-    }
+    int getTimestep() const { return timestep; }
+    int getTotalCars() const { return totalCars; }
+    int getFinishedCount() { return Finished_cars.GetCount(); }
+    int getCancelledCount() { return Cancelled_cars.GetCount(); }
 };

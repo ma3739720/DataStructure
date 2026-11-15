@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -26,6 +26,7 @@
     <ClInclude Include="Bay.h" />
     <ClInclude Include="Car.h" />
     <ClInclude Include="Center.h" />
+    <ClInclude Include="UI.h" />
     <ClInclude Include="ERLY_List.h" />
     <ClInclude Include="IDLE_List.h" />
     <ClInclude Include="Late_List.h" />
@@ -42,10 +43,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Center.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="UI.cpp" />
+    <ClCompile Include="Tests.cpp" />
     <ClCompile Include="WAIT_EU.cpp" />
     <ClCompile Include="WAIT_MU.cpp" />
     <ClCompile Include="WAIT_WU.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>

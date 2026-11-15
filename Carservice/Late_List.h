@@ -12,10 +12,7 @@ public:
    
     int getCount() const
     {
-        int count = 0;
-        for (Node<Car*>* p = frontPtr; p; p = p->getNext())
-            count++;
-        return count;
+        return GetCount();
     }
 
     // Remove and return a RANDOM car (not just the first one). Returns nullptr if empty.
@@ -23,11 +20,11 @@ public:
     // The caller sets the status to CNCL, sets the cancel time and pushes the car to Cancelled_cars.
     Car* CancelRandomCar()
     {
-        int count = getCount();
-        if (count == 0)
+        int n = getCount();
+        if (n == 0)
             return nullptr;
 
-        int k = rand() % count;                 // index of the car to cancel
+        int k = rand() % n;                // index of the car to cancel
 
         Node<Car*>* prev = nullptr;
         Node<Car*>* cur = frontPtr;
@@ -46,7 +43,8 @@ public:
             backPtr = prev;
 
         Car* chosen = cur->getItem();
-        delete cur;                             
+        count--;                                // node removed by hand, keep the counter right
+        delete cur;
         return chosen;
     }
     void Print(std::ostream& out = std::cout) const

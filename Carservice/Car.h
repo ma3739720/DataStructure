@@ -1,9 +1,8 @@
 #pragma once
 #include <iostream>
 using namespace std;   
-#include "QueueLinked.h"   
-
-class Bay;              
+#include "QueueLinked.h"
+#include "Bay.h"           // needed to print the bay a car points to
 
 enum CarStatus { IDLE, ERLY, LATE, REDY, DIAG, WAIT, SERV, CNCL, FNSH };
 enum ServiceType { SVC_MU, SVC_EU, SVC_WU };
@@ -184,9 +183,18 @@ public:
     }
 
     // ---------------- printing ----------------
+    // The format depends on where the car is (as in the Program Interface page):
+    //   DIAG / SERV : [CarID, bay]      e.g. [C73, MB9]
+    //   FNSH / CNCL : [CarID, FT]       e.g. [C73, 55]   (FT = CT for a cancelled car)
+    //   otherwise   : [CarID, VT, PT]   e.g. [C43, 90, 82]
     void print(std::ostream& out) const
     {
-        out << "[C" << CID << ", " << VT << ", " << PT << "]";
+        if ((status == DIAG || status == SERV) && assignedBay)
+            out << "[C" << CID << ", " << assignedBay << "]";
+        else if (status == FNSH || status == CNCL)
+            out << "[C" << CID << ", " << FT << "]";
+        else
+            out << "[C" << CID << ", " << VT << ", " << PT << "]";
     }
 };
 

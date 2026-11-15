@@ -10,10 +10,7 @@ public:
    
     int getCount() const
     {
-        int count = 0;
-        for (Node<Car*>* p = frontPtr; p; p = p->getNext())
-            count++;
-        return count;
+        return GetCount();
     }
 
     
