@@ -481,15 +481,7 @@ int main()
     return failed;
 }*/
 // 3amr test
-// Member 1 tests: Car, Service, Bay classes, printing.
-// To use: add this file to the project and temporarily exclude main.cpp
-// (or rename this main to main1). Needs only Car.h and Bay.h.
-/* ---- NOT NEEDED NOW (commented out) ----
-   Member 1's test was the only active code here and it has its own main(),
-   which cannot exist next to the simulation's main() below (only one main is allowed).
-   To run it: remove the comment markers around this block and comment out the main() at the bottom.
-
-#include <iostream>
+/*#include <iostream>
 #include <sstream>
 #include <string>
 #include "Car.h"
@@ -661,9 +653,8 @@ int main()
 //   4. UI::printAll: labels, counts, only 15 IDLE cars, newest first in the stacks, empty lists
 //   5. Center::simulate with 1, 2, 10, 50, 100 and 1000 cars: FNSH + CNCL == cars generated
 //   6. Bonus: VIP priority order, van travel time, the print formats and the bonus part of the screen
-//   7. No memory leak after a run (Debug build only)
-// To use: comment out the main() at the bottom of this file, then remove the comment markers
-// around this block (or rename this main to main4).
+//   7. No memory leak
+
 /*#include <iostream>
 #include <sstream>
 #include <string>
@@ -1161,14 +1152,10 @@ int main()
     }
 */
 
-// ===================== ACTIVE CODE: Phase 1 simulation (Member 4) =====================
+// ===================== ACTIVE CODE: Phase 1 simulation =====================
 // Phase 1.2 main: runs the random simulation.
 //   Carservice.exe          -> interactive: prints all lists every timestep, press a key to continue
-//   Carservice.exe auto     -> no printing, no key press: only the final summary (for quick checking)
-//   Carservice.exe [auto] N -> use N cars instead of 1000 (N must be at most 5000, the stack size)
-//
-// The tests of every member are kept above, each in a commented block with its own main().
-// To run one of them: comment out the main() below, then remove the comment markers around that block.
+
 #include <iostream>
 #include <cstdlib>
 #include <ctime>

@@ -271,7 +271,7 @@ void Center::step_ErlyToRedy()
     }
 }
 
-// 2.3  With probability 10%, one random LATE car (not the top one) is cancelled.
+// 2.3  With probability 10%, one random LATE car is cancelled.
 void Center::step_CancelLate()
 {
     if (chance(10))
@@ -299,7 +299,7 @@ void Center::step_RedyToDiag()
         DiagBay* d; Car* c = nullptr;
         Free_D_List.dequeue(d);
         int pri;
-        if (!VIP_REDY.isEmpty()) VIP_REDY.dequeue(c, pri);   // BONUS: VIP cars are picked first
+        if (!VIP_REDY.isEmpty()) VIP_REDY.dequeue(c, pri);   // VIP cars are picked first
         else                     REDY_cars.dequeue(c);
 
         d->occupy();                             // the bay is busy now (it is no longer in the free list)
@@ -314,7 +314,7 @@ void Center::step_RedyToDiag()
 
 // 2.7  Cars that finished diagnosis: 20% are cancelled, the others go to a random WAIT list.
 //      Their diagnosis bay becomes free again.
-// Only the FRONT of the priority queue is looked at (peek): the cars are sorted by finish
+// Only the FRONT of the priority queue is looked at w the cars are sorted by finish
 // time, so as soon as the front car is not finished, none of the others are.
 void Center::step_DiagToWait()
 {
@@ -331,8 +331,7 @@ void Center::step_DiagToWait()
 // 2.8 / 2.9  6 tries: a random bay type is chosen (MB 60%, EB 30%, WB 10%). If a car is waiting
 //            for it AND a bay of that type is free, the car moves into the bay and into
 //            InServ_cars. Otherwise the car is NOT taken from its WAIT list. Service lasts SERV_TIME.
-// (The doc says "if no bay is available, don't pick the car from the WAIT list": that is the
-//  "continue" below, it happens BEFORE any car is dequeued.)
+
 void Center::step_WaitToServ()
 {
     for (int i = 0; i < 6; i++)
@@ -342,7 +341,7 @@ void Center::step_WaitToServ()
         Bay* b = nullptr;
         int pri;
 
-        // BONUS: for each bay type, the VIP list is checked BEFORE the normal WAIT list
+        //for each bay type, the VIP list is checked BEFORE the normal WAIT list
         if (r < 60)         // mechanical
         {
             bool vip = !VIP_WaitMU.isEmpty();
@@ -387,17 +386,14 @@ void Center::step_ServToFinish()
     while (InServ_cars.peek(c, pri) && -pri <= timestep)   // same "look at the front only" idea as step 2.7
     {
         InServ_cars.dequeue(c, pri);
-        c->addServiceTime(SERV_TIME);            // statistics: this car spent SERV_TIME timesteps in a bay
+        c->addServiceTime(SERV_TIME);            // this car spent SERV_TIME timesteps in a bay
         releaseBay(c);
-        // BONUS: a combo car has only one (combined) service, so it leaves when it is done
+        // a combo car has only one (combined) service, so it leaves when it is done
         if (c->isCombo() || chance(40)) finishCar(c);
         else                            sendToRandomWait(c);
     }
 }
 
-// ------------------------------------------------------------
-//  BONUS steps
-// ------------------------------------------------------------
 
 // COMBO: the repair starts only when a Mechanical Bay AND an Electrical Bay are free at the
 // same timestep. The car takes both (it points to both) and leaves when the service ends.
@@ -453,12 +449,9 @@ void Center::step_RescueDispatch()
     }
 }
 
-// ------------------------------------------------------------
 //  Counting and the "no car lost" self-check
-// ------------------------------------------------------------
 
-// Adds up the sizes of every list that can hold a car. Each GetCount() is O(1), so this
-// is cheap enough to run every timestep.
+
 int Center::carsInSystem()
 {
     return IDLE_cars.GetCount() + ERLY_cars.GetCount() + LATE_cars.GetCount()
@@ -484,33 +477,33 @@ void Center::checkNoCarLost()
     }
 }
 
-// ------------------------------------------------------------
+
 //  The Phase 1 random simulation
-// ------------------------------------------------------------
+
 void Center::simulate(int numCars, bool interactive)
 {
     generateCars(numCars);                       // 1000 cars by default, all in IDLE
     UI ui;
 
-    const int MAX_STEPS = 100000;    // safety net, should never be reached
+    const int MAX_STEPS = 10000;   
     int fnsh = 0, cncl = 0;
 
     while (timestep < MAX_STEPS)
     {
-        timestep++;                  // the first timestep is 1 (as the doc says)
+        timestep++;                 
 
-        // the steps of the document, in order
+       
         step_IdleToLists();      // 2.1
         step_ErlyToRedy();       // 2.2
         step_CancelLate();       // 2.3
         step_LateToRedy();       // 2.4
         step_RedyToDiag();       // 2.5, 2.6
         step_DiagToWait();       // 2.7
-        step_Combo();            // bonus: combo cars first (they need two bays at once)
+        step_Combo();            // combo cars first (they need two bays at once)
         step_WaitToServ();       // 2.8, 2.9
         step_ServToFinish();     // 2.10
-        step_RescueReturn();     // bonus: vans that are back
-        step_RescueDispatch();   // bonus: free vans leave for remote cars
+        step_RescueReturn();     // vans that are back
+        step_RescueDispatch();   // free vans leave for remote cars
 
         checkNoCarLost();        // no car may disappear or appear
 
@@ -531,14 +524,14 @@ void Center::simulate(int numCars, bool interactive)
             break;
     }
 
-    // Summary: lets you check the result at a glance (FNSH + CNCL must equal the cars generated).
-    std::cout << "\n===== Simulation finished =====\n"
+
+    cout << "\n===== Simulation finished =====\n"
               << "Timesteps : " << timestep << "\n"
               << "Cars      : " << totalCars << "\n"
               << "FNSH      : " << fnsh << "\n"
               << "CNCL      : " << cncl << "\n"
               << "FNSH + CNCL == cars generated ? "
               << (fnsh + cncl == totalCars ? "YES" : "NO") << "\n";
-    std::cout << "Bonus cars: " << numVIP << " VIP, " << numCombo << " COMBO, "
+    cout << "Bonus cars: " << numVIP << " VIP, " << numCombo << " COMBO, "
               << numRemote << " remote (rescued by " << N_RB << " vans)\n";
 }

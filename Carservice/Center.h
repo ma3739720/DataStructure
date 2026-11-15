@@ -1,23 +1,19 @@
 #pragma once
 // ============================================================
-//  Center (Member 4)
+
 //
 //  WHAT IT IS
-//    The "maestro" class of the project (Appendix A). It OWNS every list and every bay,
+//    The "maestro" class of the project . It OWNS every list and every bay,
 //    and it runs the Phase 1 random simulation, one timestep after another.
 //
 //  KEY RULES THE CODE FOLLOWS
 //    1. Every list stores POINTERS (Car*, DiagBay*, ...), never objects.
 //    2. Every Car and every Bay is created ONCE with new. After that, moving a car from one
-//       list to another only moves the pointer ("share, move, don't copy").
-//    3. Every list is a lab Queue / PriQueue / Stack, or a class derived from one.
-//    4. A car points to the bay it is using (Car::setAssignedBay), so there is no "busy bay" list.
-//    5. No global variables and no friendship: the UI receives the lists as parameters.
-//
-//  BONUS FEATURES (part of the simulation):
+//       list to another only moves the pointer.
+//    3. A car points to the bay it is using (Car::setAssignedBay), so there is no "busy bay" list.
+//  4. Every car and every bay is deleted exactly once in the destructor of Center.
 //    VIP cars, COMBO multi-bay cars and the mobile Rescue Unit for remote cars.
-//    All the new lists are lab queues / priority queues, so no new data structure is
-//    needed.
+
 // ============================================================
 #include <iostream>
 #include <cstdlib>
@@ -38,26 +34,23 @@
 
 class Center
 {
-    // ---------------- configuration (constants) ----------------
-    // "static const" members belong to the class (they are NOT global variables). Keeping the
-    // numbers here means there are no "magic numbers" inside the code below.
-    static const int N_DU = 3;          // diagnosis bays (my choice: the brief gives no number)
+
+    static const int N_DU = 3;          // diagnosis bays 
     static const int N_MU = 3;          // mechanical bays
     static const int N_EU = 3;          // electrical bays
     static const int N_WU = 2;          // wash bays
     static const int WB_CAP = 3;        // cars per wash bay (a wash bay holds many cars at once)
-    static const int DIAG_TIME = 3;     // timesteps a car spends in diagnosis (step 2.6 of the doc)
-    static const int SERV_TIME = 4;     // timesteps a car spends in service   (step 2.9 of the doc)
+    static const int DIAG_TIME = 3;     // timesteps a car spends in diagnosis 
+    static const int SERV_TIME = 4;     // timesteps a car spends in service  
 
-    // ---------------- bonus configuration ----------------
     static const int N_RB = 2;          // rescue vans (van i drives 10 * i km per timestep)
     static const int PCT_REMOTE = 10;   // % of the cars that are remote cars
     static const int PCT_COMBO = 10;    // % of the cars that are combo cars
     static const int PCT_VIP = 10;      // % of the cars that are VIP cars
     static const int MAX_DISTANCE = 60; // remote cars are 5 .. 60 km away
 
-    // ---------------- the 15 lists (all hold pointers) ----------------
-    // The number and the type of each list follow the table of the project document.
+    // ---------------- the 15 lists (pointers) ----------------
+
     IDLE_List                IDLE_cars;        // 1  cars that have not arrived yet, sorted by VT
     ERLY_List                ERLY_cars;        // 2  early cars, sorted by PT (smallest first)
     LATE_List                LATE_cars;        // 3  late cars, in arrival order
@@ -73,8 +66,7 @@ class Center
     priQueue<Car*>           InServ_cars;      // 13 cars in service, priority = -(finish timestep)
     ArrayStack<Car*>         Cancelled_cars;   // 14 (CNCL) most recent car on top
     ArrayStack<Car*>         Finished_cars;    // 15 (FNSH) most recent car on top
-    // NOTE on the two priority queues: the lab priQueue serves the HIGHEST number first.
-    // We want the car that finishes EARLIEST, so we store the finish time with a minus sign.
+    // a minus sign lel pri.
 
     // ---------------- bonus lists (VIP, COMBO, remote cars) ----------------
     priQueue<Car*>           VIP_REDY;         // VIP cars ready for diagnosis, highest priority first
@@ -101,23 +93,22 @@ class Center
     void sendToRandomWait(Car* c);            // -> one of WAIT_MU / WAIT_EU / WAIT_WU
     void cancelRandomLateNotTop();            // random LATE car except the first one -> CNCL
     void releaseOne(Bay* b);                  // one bay goes back to its free list
-    void createRescueUnits();                 // bonus: the vans
+    void createRescueUnits();               
 
-    // One function per step of the simulation (2.1 ... 2.10 of the doc). Splitting the work like
-    // this makes each step easy to read, test and explain.
+    // One function per step of the simulation 
     void step_IdleToLists();      // 2.1
     void step_ErlyToRedy();       // 2.2
     void step_CancelLate();       // 2.3
     void step_LateToRedy();       // 2.4
-    void step_RedyToDiag();       // 2.5 (+ 2.6: diagnosis lasts DIAG_TIME)
+    void step_RedyToDiag();       // 2.5 (+ 2.6)
     void step_DiagToWait();       // 2.7
-    void step_WaitToServ();       // 2.8 (+ 2.9: service lasts SERV_TIME)
+    void step_WaitToServ();       // 2.8 (+ 2.9)
     void step_ServToFinish();     // 2.10
-    void step_Combo();            // bonus: combo cars need an MB and an EB at the same timestep
-    void step_RescueReturn();     // bonus: vans that are back bring their car to REDY
-    void step_RescueDispatch();   // bonus: free vans leave for the first remote cars
+    void step_Combo();            //  combo cars need an MB and an EB at the same timestep
+    void step_RescueReturn();     //  vans that are back bring their car to REDY
+    void step_RescueDispatch();   //  free vans leave for the first remote cars
 
-    // counting (every DS keeps its own counter, GetCount() is O(1))
+    // counting 
     int carsInSystem();           // sum of all the lists that hold cars
     void checkNoCarLost();        // aborts if carsInSystem() != totalCars
 
@@ -129,7 +120,6 @@ public:
     // interactive = false: no printing and no key press (used for quick checking)
     void simulate(int numCars, bool interactive);
 
-    // ---- bonus formulas (public and static so they can be tested on their own) ----
     // VIP priority: the VIP level decides first (3 beats 1); inside a level the car that
     // entered the list earlier goes first. A bigger number = served first.
     // (level * 100000 is always bigger than any timestep, so the level always wins.)

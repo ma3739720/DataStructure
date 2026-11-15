@@ -12,8 +12,8 @@ void UI::header(std::ostream& out, const std::string& title, char fill)
 // ---------------- output ----------------
 // Every list prints itself (count + items). The UI only chooses the label and the order.
 // Which function prints what:
-//   - IDLE / ERLY / LATE / REDY : their own Print() (Member 2), they print "<n> LABEL: items"
-//   - WAIT_MU / WAIT_EU / WAIT_WU : their own print() (Member 3)
+//   - IDLE / ERLY / LATE / REDY : their own Print() , they print "<n> LABEL: items"
+//   - WAIT_MU / WAIT_EU / WAIT_WU : their own print() 
 //   - plain lab queues, priority queues and stacks : the print() added to the lab classes,
 //     preceded by the count from GetCount()
 void UI::printAll(int timestep,
@@ -26,11 +26,11 @@ void UI::printAll(int timestep,
 {
     std::ostream& out = std::cout;
 
-    out << "\n\n";                                       // blank lines: separates this timestep from the last one
+    out << "\n\n";                                      
     out << "Current Timestep:" << timestep << "\n";
 
     header(out, "IDLE Cars [CarID, VT, PT]", '=');
-    idle.Print(out, 15);                              // only the FIRST 15 cars (the doc says so)
+    idle.Print(out, 15);                              // only the FIRST 15 cars 
 
     // The doc shows ERLY, LATE and REDY under one title
     header(out, "ERLY & LATE & REDY Cars [CarID, VT, PT]", '=');
@@ -68,7 +68,7 @@ void UI::printAll(int timestep,
     out << finished.GetCount() << " DONE: ";           finished.print(out);         out << "\n";
 }
 
-// BONUS lists. Same style as the other sections.
+
 void UI::printBonus(
     priQueue<Car*>& vipRedy, priQueue<Car*>& vipMU, priQueue<Car*>& vipEU, priQueue<Car*>& vipWU,
     LinkedQueue<Car*>& waitCombo, LinkedQueue<Car*>& rmot,

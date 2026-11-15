@@ -1,9 +1,8 @@
 #pragma once
-// ============================================================
-//  UI class (Member 4)
+
 //
 //  WHAT IT DOES
-//    All the console output of the simulation (Appendix A: "UI class"). It prints the screen
+//    All the console output of the simulation . It prints the screen
 //    described in the "Program Interface" page of the project document.
 //
 //  HOW IT WORKS
@@ -11,7 +10,7 @@
 //      a label and calls the list's own print(). So the UI does not know how a list stores
 //      its data, and it does not need to be a friend of Center.
 //    - Printing never changes a list.
-//    - It does NOT read or write the input / output files (there are no files in Phase 1).
+
 // ============================================================
 #include <iostream>
 #include <string>
