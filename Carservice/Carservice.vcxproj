@@ -44,7 +44,6 @@
   <ItemGroup>
     <ClCompile Include="Center.cpp" />
     <ClCompile Include="UI.cpp" />
-    <ClCompile Include="Tests.cpp" />
     <ClCompile Include="WAIT_EU.cpp" />
     <ClCompile Include="WAIT_MU.cpp" />
     <ClCompile Include="WAIT_WU.cpp" />

@@ -487,8 +487,7 @@ int main()
 /* ---- NOT NEEDED NOW (commented out) ----
    Member 1's test was the only active code here and it has its own main(),
    which cannot exist next to the simulation's main() below (only one main is allowed).
-   The same checks still run with:  Carservice.exe test   (Tests.cpp, namespace m1).
-   To run only this test: remove the comment markers here and comment out the main() below.
+   To run it: remove the comment markers around this block and comment out the main() at the bottom.
 
 #include <iostream>
 #include <sstream>
@@ -652,28 +651,532 @@ int main()
 }
 ---- end of Member 1's test ---- */
 
+// Member 4 tests: Center, UI, the random simulator (with the bonus features) and the counters /
+// print() that were added to the lab classes.
+//   What the tests check:
+//   1. LinkedQueue, priQueue, ArrayStack: GetCount() follows the items, print() prints in the right
+//      order and does NOT change the list
+//   2. IDLE / ERLY / LATE: the counter stays right after InsertCar, RemoveRandomCar, CancelRandomCar
+//   3. Print formats of a car in each place ([C73, MB9], [C73, 55], ...) and of the bays
+//   4. UI::printAll: labels, counts, only 15 IDLE cars, newest first in the stacks, empty lists
+//   5. Center::simulate with 1, 2, 10, 50, 100 and 1000 cars: FNSH + CNCL == cars generated
+//   6. Bonus: VIP priority order, van travel time, the print formats and the bonus part of the screen
+//   7. No memory leak after a run (Debug build only)
+// To use: comment out the main() at the bottom of this file, then remove the comment markers
+// around this block (or rename this main to main4).
+/*#include <iostream>
+#include <sstream>
+#include <string>
+#include <cstdlib>
+#ifdef _DEBUG
+#include <crtdbg.h>
+#endif
+#include "Center.h"
+#include "UI.h"
+
+    static int passed = 0, failed = 0;
+
+    static void checkTrue(const std::string& name, bool ok)
+    {
+        if (ok) { passed++; std::cout << "PASS  " << name << std::endl; }
+        else    { failed++; std::cout << "FAIL  " << name << std::endl; }
+    }
+
+    // Collects everything written to cout (used to test the UI output and to hide the simulator summary)
+    struct CaptureCout
+    {
+        std::ostringstream buf;
+        std::streambuf* old;
+        CaptureCout() : old(std::cout.rdbuf(buf.rdbuf())) {}
+        ~CaptureCout() { std::cout.rdbuf(old); }
+        std::string str() const { return buf.str(); }
+    };
+
+    static bool contains(const std::string& s, const std::string& part) { return s.find(part) != std::string::npos; }
+
+    static int countOf(const std::string& s, const std::string& part)
+    {
+        int n = 0;
+        for (size_t p = s.find(part); p != std::string::npos; p = s.find(part, p + part.size())) n++;
+        return n;
+    }
+
+    // part of the text between two markers (the section of one list on the screen)
+    static std::string between(const std::string& s, const std::string& from, const std::string& to)
+    {
+        size_t a = s.find(from);
+        if (a == std::string::npos) return "";
+        size_t b = s.find(to, a + from.size());
+        return s.substr(a, b == std::string::npos ? std::string::npos : b - a);
+    }
+
+    // ------------------------------------------------------------------
+    // TEST 1: the counter and print() added to the lab classes
+    //   - GetCount() follows enqueue / dequeue / push / pop
+    //   - print() prints in the right order and does NOT change the list
+    // ------------------------------------------------------------------
+    static void testLabClassAdditions()
+    {
+        std::cout << "\n--- Lab classes: GetCount() and print() ---" << std::endl;
+        Car a(1, 10, 10, 3), b(2, 20, 20, 3), c(3, 30, 30, 3);
+        std::ostringstream o;
+
+        LinkedQueue<Car*> q;
+        checkTrue("LinkedQueue: GetCount is 0 when empty", q.GetCount() == 0);
+        q.enqueue(&a); q.enqueue(&b); q.enqueue(&c);
+        checkTrue("LinkedQueue: GetCount is 3 after 3 enqueues", q.GetCount() == 3);
+        Car* x = nullptr;
+        q.dequeue(x);
+        checkTrue("LinkedQueue: GetCount is 2 after a dequeue", q.GetCount() == 2 && x == &a);
+        q.print(o);
+        checkTrue("LinkedQueue: print goes front to back", o.str() == "[C2, 20, 20] [C3, 30, 30]");
+        checkTrue("LinkedQueue: print did not change the list", q.GetCount() == 2 && q.peek(x) && x == &b);
+        o.str(""); q.print(o, ", ");
+        checkTrue("LinkedQueue: print uses the separator given", o.str() == "[C2, 20, 20], [C3, 30, 30]");
+        while (q.dequeue(x)) {}
+        checkTrue("LinkedQueue: GetCount is 0 after emptying", q.GetCount() == 0);
+        o.str(""); q.print(o);
+        checkTrue("LinkedQueue: printing an empty list prints nothing", o.str() == "");
+
+        priQueue<Car*> pq;
+        pq.enqueue(&a, -30); pq.enqueue(&b, -10); pq.enqueue(&c, -20);
+        checkTrue("priQueue: GetCount is 3", pq.GetCount() == 3);
+        o.str(""); pq.print(o);
+        checkTrue("priQueue: print goes from the highest priority", o.str() == "[C2, 20, 20] [C3, 30, 30] [C1, 10, 10]");
+        int pri;
+        pq.dequeue(x, pri);
+        checkTrue("priQueue: GetCount is 2 after a dequeue", pq.GetCount() == 2 && x == &b);
+
+        ArrayStack<Car*> st;
+        checkTrue("ArrayStack: GetCount is 0 when empty", st.GetCount() == 0);
+        st.push(&a); st.push(&b); st.push(&c);
+        checkTrue("ArrayStack: GetCount is 3 after 3 pushes", st.GetCount() == 3);
+        o.str(""); st.print(o);
+        checkTrue("ArrayStack: print starts with the most recent car", o.str() == "[C3, 30, 30] [C2, 20, 20] [C1, 10, 10]");
+        checkTrue("ArrayStack: print did not change the stack", st.GetCount() == 3 && st.peek(x) && x == &c);
+        st.pop(x);
+        checkTrue("ArrayStack: GetCount is 2 after a pop", st.GetCount() == 2);
+    }
+
+    // ------------------------------------------------------------------
+    // TEST 2: the lists that edit their nodes by hand must keep the counter right
+    //   (IDLE::InsertCar, ERLY::RemoveRandomCar, LATE::CancelRandomCar)
+    // ------------------------------------------------------------------
+    static void testDerivedCounters()
+    {
+        std::cout << "\n--- Derived lists keep GetCount() correct ---" << std::endl;
+        Car* cars[6];
+        for (int i = 0; i < 6; i++) cars[i] = new Car(i + 1, 10 * (i + 1), 10 * (6 - i), 3);
+
+        IDLE_List idle;
+        idle.InsertCar(cars[0]);                         // empty list
+        idle.InsertCar(cars[1]);                         // front
+        idle.InsertCar(cars[2]);                         // middle / end
+        checkTrue("IDLE: GetCount after 3 InsertCar", idle.GetCount() == 3 && idle.getCount() == 3);
+        idle.enqueue(cars[3]);
+        checkTrue("IDLE: GetCount after InsertCar + enqueue mix", idle.GetCount() == 4);
+        Car* c = nullptr;
+        idle.dequeue(c);
+        checkTrue("IDLE: GetCount after dequeue", idle.GetCount() == 3);
+
+        ERLY_List erly;
+        for (int i = 0; i < 4; i++) erly.InsertCar(cars[i]);
+        checkTrue("ERLY: GetCount after 4 InsertCar", erly.GetCount() == 4);
+        Car* r = erly.RemoveRandomCar();
+        checkTrue("ERLY: RemoveRandomCar returns a car and lowers GetCount", r != nullptr && erly.GetCount() == 3);
+        int pri; int n = 0;
+        while (erly.dequeue(c, pri)) n++;
+        checkTrue("ERLY: the counter matches the real number of cars", n == 3 && erly.GetCount() == 0);
+        checkTrue("ERLY: RemoveRandomCar on an empty list is nullptr", erly.RemoveRandomCar() == nullptr);
+
+        LATE_List late;
+        for (int i = 0; i < 4; i++) late.enqueue(cars[i]);
+        r = late.CancelRandomCar();
+        checkTrue("LATE: CancelRandomCar returns a car and lowers GetCount", r != nullptr && late.GetCount() == 3);
+        n = 0;
+        while (late.dequeue(c)) n++;
+        checkTrue("LATE: the counter matches the real number of cars", n == 3 && late.GetCount() == 0);
+        checkTrue("LATE: CancelRandomCar on an empty list is nullptr", late.CancelRandomCar() == nullptr);
+
+        // cancelling the LAST car must keep backPtr right: the next enqueue must still work
+        LATE_List l2;
+        l2.enqueue(cars[4]);
+        l2.CancelRandomCar();
+        l2.enqueue(cars[5]);
+        l2.dequeue(c);
+        checkTrue("LATE: list still works after cancelling its only car", c == cars[5] && l2.GetCount() == 0);
+
+        for (int i = 0; i < 6; i++) delete cars[i];
+    }
+
+    // ------------------------------------------------------------------
+    // TEST 3: Car::print and the bay printing used by the UI
+    // ------------------------------------------------------------------
+    static void testPrintFormats()
+    {
+        std::cout << "\n--- Print formats ---" << std::endl;
+        Car c(73, 50, 40, 3);
+        MechBay m(9); DiagBay d(1); WashBay w(2, 3); ElecBay e(7);
+        std::ostringstream o;
+
+        o << &c;
+        checkTrue("IDLE / ERLY / LATE / REDY car prints [CarID, VT, PT]", o.str() == "[C73, 40, 50]");
+
+        c.setStatus(DIAG); c.setAssignedBay(&d);
+        o.str(""); o << &c;
+        checkTrue("car in DIAG prints [CarID, bay]", o.str() == "[C73, D1]");
+
+        c.setStatus(SERV); c.setAssignedBay(&m);
+        o.str(""); o << &c;
+        checkTrue("car in SERV prints [CarID, bay]", o.str() == "[C73, MB9]");
+
+        c.setAssignedBay(nullptr); c.setStatus(FNSH); c.setFinishTime(55);
+        o.str(""); o << &c;
+        checkTrue("finished car prints [CarID, FT]", o.str() == "[C73, 55]");
+
+        c.setStatus(CNCL); c.setCancelTime(60);
+        o.str(""); o << &c;
+        checkTrue("cancelled car prints [CarID, CT]", o.str() == "[C73, 60]");
+
+        w.occupy();
+        o.str(""); o << &d << " " << &m << " " << &e << " " << &w;
+        checkTrue("bays in the free lists print D1 M9 E7 W2(cap 2)", o.str() == "D1 M9 E7 W2(cap 2)");
+        o.str(""); o << (Bay*)&m << " " << (Bay*)&w;
+        checkTrue("bays in use print MB9 WB2", o.str() == "MB9 WB2");
+    }
+
+    // ------------------------------------------------------------------
+    // TEST 4: UI::printAll
+    //   builds one small list of every kind, prints the screen into a string and checks
+    //   the labels, the counts, the formats, the "first 15" rule, and that nothing changes.
+    // ------------------------------------------------------------------
+    static void testUI()
+    {
+        std::cout << "\n--- UI::printAll ---" << std::endl;
+
+        IDLE_List idle; ERLY_List erly; LATE_List late; REDY_List redy;
+        LinkedQueue<DiagBay*> freeD; priQueue<Car*> diag;
+        WAIT_MU wMU; WAIT_EU wEU; WAIT_WU wWU;
+        LinkedQueue<MechBay*> freeM; LinkedQueue<ElecBay*> freeE; LinkedQueue<WashBay*> freeW;
+        priQueue<Car*> inServ; ArrayStack<Car*> cncl, fnsh;
+
+        // 20 IDLE cars: only the first 15 may be printed
+        Car* idleCars[20];
+        for (int i = 0; i < 20; i++) { idleCars[i] = new Car(100 + i, 50 + i, 40 + i, 3); idle.InsertCar(idleCars[i]); }
+
+        Car e1(1, 70, 60, 3), l1(2, 50, 60, 3), r1(3, 10, 10, 3);
+        e1.setStatus(ERLY); erly.InsertCar(&e1);
+        l1.setStatus(LATE); late.enqueue(&l1);
+        r1.setStatus(REDY); redy.enqueue(&r1);
+
+        DiagBay d1(1), d2(2); MechBay m1(1), m2(2); ElecBay el1(1); WashBay w1(1, 3);
+        freeD.enqueue(&d2);                               // D1 is busy
+        freeM.enqueue(&m1); freeM.enqueue(&m2);
+        freeE.enqueue(&el1);
+        w1.occupy(); freeW.enqueue(&w1);                  // 1 car inside: cap 2 left
+
+        Car cd(18, 0, 0, 3); cd.setStatus(DIAG); cd.setAssignedBay(&d1); diag.enqueue(&cd, -5);
+        Car cs(73, 0, 0, 3); cs.setStatus(SERV); cs.setAssignedBay(&m1); inServ.enqueue(&cs, -9);
+
+        Car wa(4, 0, 0, 3), wb(5, 0, 0, 3);
+        wa.addService(SVC_MU, 5); wb.addService(SVC_MU, 4);
+        wMU.enqueue(&wa); wMU.enqueue(&wb);
+
+        Car f1(31, 0, 0, 0), f2(32, 0, 0, 0), k1(41, 0, 0, 0);
+        f1.setStatus(FNSH); f1.setFinishTime(40); fnsh.push(&f1);
+        f2.setStatus(FNSH); f2.setFinishTime(55); fnsh.push(&f2);      // most recent
+        k1.setStatus(CNCL); k1.setCancelTime(60); cncl.push(&k1);
+
+        UI ui;
+        std::string out;
+        {
+            CaptureCout cap;
+            ui.printAll(7, idle, erly, late, redy, freeD, diag, wMU, wEU, wWU, freeM, freeE, freeW, inServ, cncl, fnsh);
+            out = cap.str();
+        }
+
+        checkTrue("shows the timestep", contains(out, "Current Timestep:7"));
+        checkTrue("section headers follow the Program Interface page",
+            contains(out, "ERLY & LATE & REDY Cars [CarID, VT, PT]") &&
+            contains(out, "DIAG Cars [CarID, Diag Bay ID]") &&
+            contains(out, "In-Service Cars [CarID, Bay ID]") &&
+            contains(out, "CNCL Cars [CarID, CancelTime]") &&
+            contains(out, "FNSH Cars [CarID, FinishTime]"));
+        std::string idleText = between(out, "IDLE Cars", "ERLY & LATE & REDY");
+        checkTrue("IDLE shows the total count (20)", contains(idleText, "20 cars:"));
+        checkTrue("IDLE prints only the first 15 cars", countOf(idleText, "[C1") == 15);   // car ids are 100..119 (the header "[CarID" does not match)
+        checkTrue("IDLE says 'and so on' when more cars exist", contains(idleText, "and so on"));
+        checkTrue("ERLY section", contains(out, "1 ERLY: [C1, 60, 70]"));
+        checkTrue("LATE section", contains(out, "1 LATE: [C2, 60, 50]"));
+        checkTrue("REDY section", contains(out, "1 REDY: [C3, 10, 10]"));
+        checkTrue("free diagnosis bays", contains(out, "1 Diag Bays: D2"));
+        checkTrue("cars in diagnosis", contains(out, "1 Cars in Diag: [C18, D1]"));
+        checkTrue("WAIT_MU section", contains(out, "2 MU cars waiting: [C4, 5] [C5, 4]"));
+        checkTrue("free MB list", contains(out, "2 MB free: M1, M2"));
+        checkTrue("free EB list", contains(out, "1 EB free: E1"));
+        checkTrue("free WB list shows the free capacity", contains(out, "1 WB free: W1(cap 2)"));
+        checkTrue("cars in service", contains(out, "1 Cars in Serv: [C73, MB1]"));
+        checkTrue("cancelled list", contains(out, "1 cancelled: [C41, 60]"));
+        checkTrue("finished list: most recent car first", contains(out, "2 DONE: [C32, 55] [C31, 40]"));
+
+        // printing twice gives the same screen, and no list was changed
+        std::string out2;
+        {
+            CaptureCout cap;
+            ui.printAll(7, idle, erly, late, redy, freeD, diag, wMU, wEU, wWU, freeM, freeE, freeW, inServ, cncl, fnsh);
+            out2 = cap.str();
+        }
+        checkTrue("printing twice gives the same screen", out == out2);
+        checkTrue("printing did not change any count",
+            idle.GetCount() == 20 && erly.GetCount() == 1 && late.GetCount() == 1 && redy.GetCount() == 1 &&
+            freeD.GetCount() == 1 && diag.GetCount() == 1 && wMU.GetCount() == 2 &&
+            freeM.GetCount() == 2 && freeE.GetCount() == 1 && freeW.GetCount() == 1 &&
+            inServ.GetCount() == 1 && cncl.GetCount() == 1 && fnsh.GetCount() == 2);
+
+        // empty lists must print without problems
+        IDLE_List i2; ERLY_List e2; LATE_List l2; REDY_List r2;
+        LinkedQueue<DiagBay*> fd2; priQueue<Car*> dg2; WAIT_MU wm2; WAIT_EU we2; WAIT_WU ww2;
+        LinkedQueue<MechBay*> fm2; LinkedQueue<ElecBay*> fe2; LinkedQueue<WashBay*> fw2;
+        priQueue<Car*> is2; ArrayStack<Car*> cn2, fn2;
+        std::string empty;
+        {
+            CaptureCout cap;
+            ui.printAll(1, i2, e2, l2, r2, fd2, dg2, wm2, we2, ww2, fm2, fe2, fw2, is2, cn2, fn2);
+            empty = cap.str();
+        }
+        checkTrue("empty lists print with count 0", contains(empty, "0 cars:") && contains(empty, "0 DONE:") && contains(empty, "0 Cars in Serv:"));
+
+        for (int i = 0; i < 20; i++) delete idleCars[i];
+    }
+
+    // ------------------------------------------------------------------
+    // TEST 5: the whole simulation (Center)
+    //   For different numbers of cars: the simulation stops, and at the end
+    //   FNSH + CNCL == the number of cars generated. Center also checks every
+    //   timestep that no car is lost or duplicated (it stops the program if one is).
+    // ------------------------------------------------------------------
+    static void testSimulation()
+    {
+        std::cout << "\n--- Center::simulate (non-interactive) ---" << std::endl;
+        int sizes[] = { 1, 2, 10, 50, 100, 1000 };
+        for (int k = 0; k < 6; k++)
+        {
+            int n = sizes[k];
+            srand(1000 + k);                                 // a different known seed each time
+            bool ok;
+            int steps, fin, can;
+            {
+                CaptureCout cap;                             // hide the summary of the simulator
+                Center center;
+                center.simulate(n, false);
+                steps = center.getTimestep();
+                fin = center.getFinishedCount();
+                can = center.getCancelledCount();
+                ok = (center.getTotalCars() == n);
+            }
+            checkTrue("simulate(" + std::to_string(n) + " cars): FNSH + CNCL == cars generated",
+                ok && fin + can == n && steps > 0);
+        }
+
+        // at least 20 timesteps are needed for 1000 cars, because IDLE gives only 50 cars per timestep
+        srand(7);
+        int steps;
+        {
+            CaptureCout cap;
+            Center center;
+            center.simulate(1000, false);
+            steps = center.getTimestep();
+        }
+        checkTrue("1000 cars need at least 20 timesteps (50 cars leave IDLE per step)", steps >= 20);
+
+        // several random runs in a row: the self-check inside Center never fires
+        bool allOk = true;
+        for (int seed = 1; seed <= 10; seed++)
+        {
+            srand(seed);
+            CaptureCout cap;
+            Center center;
+            center.simulate(200, false);
+            if (center.getFinishedCount() + center.getCancelledCount() != 200) allOk = false;
+        }
+        checkTrue("10 random runs of 200 cars all end with every car in FNSH or CNCL", allOk);
+    }
+
+    // ------------------------------------------------------------------
+    // TEST 5b: BONUS (VIP cars, COMBO cars, Rescue Unit)
+    //   - VIP priority order (level first, then earlier entry) and that the priority queue serves it
+    //   - van travel time = distance / speed rounded up
+    //   - the print formats of remote, rescued and combo cars, and the bonus part of the screen
+    //   - the whole simulation with the bonus on: every car still ends in FNSH or CNCL
+    // ------------------------------------------------------------------
+    static void testBonus()
+    {
+        std::cout << "\n--- BONUS: VIP, COMBO, Rescue Unit ---" << std::endl;
+
+        // ---- VIP priority ----
+        checkTrue("VIP: level 3 beats level 2 beats level 1 (same entry time)",
+            Center::vipPriority(3, 10) > Center::vipPriority(2, 10) &&
+            Center::vipPriority(2, 10) > Center::vipPriority(1, 10));
+        checkTrue("VIP: same level, the car that entered earlier goes first",
+            Center::vipPriority(2, 10) > Center::vipPriority(2, 11));
+        checkTrue("VIP: a high level beats a low level even if it entered much later",
+            Center::vipPriority(3, 5000) > Center::vipPriority(1, 1));
+
+        Car v1(1, 0, 0, 0), v2(2, 0, 0, 0), v3(3, 0, 0, 0), v4(4, 0, 0, 0);
+        priQueue<Car*> q;
+        q.enqueue(&v1, Center::vipPriority(1, 5));       // level 1, early
+        q.enqueue(&v2, Center::vipPriority(3, 9));       // level 3, late
+        q.enqueue(&v3, Center::vipPriority(3, 7));       // level 3, earlier
+        q.enqueue(&v4, Center::vipPriority(2, 1));       // level 2
+        int order[4], n = 0, pri;
+        Car* c = nullptr;
+        while (q.dequeue(c, pri)) order[n++] = c->getID();
+        checkTrue("VIP list serves C3, C2, C4, C1 (level first, then earlier entry)",
+            n == 4 && order[0] == 3 && order[1] == 2 && order[2] == 4 && order[3] == 1);
+
+        // ---- Rescue van travel time ----
+        checkTrue("travel time 25 km at 10 km/step = 3 steps", Center::travelTime(25, 10) == 3);
+        checkTrue("travel time 30 km at 10 km/step = 3 steps", Center::travelTime(30, 10) == 3);
+        checkTrue("travel time 31 km at 10 km/step = 4 steps (rounded up)", Center::travelTime(31, 10) == 4);
+        checkTrue("travel time 1 km at 20 km/step = 1 step (never 0)", Center::travelTime(1, 20) == 1);
+        checkTrue("the faster van is never slower", Center::travelTime(55, 20) <= Center::travelTime(55, 10));
+
+        // ---- print formats ----
+        RescueBay rb(1, 10);
+        MechBay mb(2); ElecBay eb(1);
+        std::ostringstream o;
+
+        Car remote(7, 40, 40, 0);
+        remote.setDistance(35); remote.setStatus(RMOT);
+        o << &remote;
+        checkTrue("remote car waiting prints [CarID, distance]", o.str() == "[C7, 35km]");
+
+        remote.setStatus(RESC); remote.setAssignedBay(&rb);
+        o.str(""); o << &remote;
+        checkTrue("remote car being rescued prints [CarID, van]", o.str() == "[C7, RB1]");
+
+        Car combo(8, 10, 10, 0);
+        combo.setCombo(true); combo.setStatus(SERV);
+        combo.setAssignedBay(&mb); combo.setAssignedBay2(&eb);
+        o.str(""); o << &combo;
+        checkTrue("combo car in service prints both bays", o.str() == "[C8, MB2+EB1]");
+
+        o.str(""); o << &rb;
+        checkTrue("free van prints ID and speed", o.str() == "R1(10km/step)");
+        checkTrue("a normal car has no bonus data", !v1.isCombo() && v1.getVIPLevel() == 0 && v1.getDistance() == 0);
+
+        // ---- the bonus part of the screen ----
+        priQueue<Car*> vipRedy, vipMU, vipEU, vipWU, rescuing;
+        LinkedQueue<Car*> waitCombo, rmot;
+        LinkedQueue<RescueBay*> freeRB;
+        Car vip(9, 20, 20, 0); vip.setVIPLevel(2); vip.setStatus(REDY);
+        Car cw(10, 30, 30, 0); cw.setCombo(true); cw.setStatus(WAIT);
+        Car rm(11, 50, 50, 0); rm.setDistance(12); rm.setStatus(RMOT);
+        Car rs(12, 60, 60, 0); rs.setDistance(40); rs.setStatus(RESC); rs.setAssignedBay(&rb);
+        RescueBay rb2(2, 20);
+        vipRedy.enqueue(&vip, Center::vipPriority(2, 5));
+        waitCombo.enqueue(&cw);
+        rmot.enqueue(&rm);
+        rescuing.enqueue(&rs, -20);
+        freeRB.enqueue(&rb2);
+
+        UI ui;
+        std::string out;
+        {
+            CaptureCout cap;
+            ui.printBonus(vipRedy, vipMU, vipEU, vipWU, waitCombo, rmot, rescuing, freeRB);
+            out = cap.str();
+        }
+        checkTrue("screen: VIP section", contains(out, "1 VIP REDY: [C9, 20, 20]") && contains(out, "0 VIP MB waiting:"));
+        checkTrue("screen: COMBO section", contains(out, "1 COMBO waiting: [C10, 30, 30]"));
+        checkTrue("screen: RMOT section", contains(out, "1 RMOT: [C11, 12km]"));
+        checkTrue("screen: rescue vans section", contains(out, "1 RB free: R2(20km/step)") && contains(out, "1 Cars in Rescue: [C12, RB1]"));
+        checkTrue("screen: printing changed nothing",
+            vipRedy.GetCount() == 1 && waitCombo.GetCount() == 1 && rmot.GetCount() == 1 &&
+            rescuing.GetCount() == 1 && freeRB.GetCount() == 1);
+
+        // ---- the whole simulation (the bonus features are part of it) ----
+        int sizes[] = { 1, 10, 100, 1000 };
+        for (int k = 0; k < 4; k++)
+        {
+            srand(2000 + k);
+            int fin, can;
+            {
+                CaptureCout cap;
+                Center center;
+                center.simulate(sizes[k], false);
+                fin = center.getFinishedCount();
+                can = center.getCancelledCount();
+            }
+            checkTrue("bonus simulate(" + std::to_string(sizes[k]) + " cars): FNSH + CNCL == cars generated",
+                fin + can == sizes[k]);
+        }
+
+        srand(11);
+        int vips = 0, combos = 0, remotes = 0;
+        {
+            CaptureCout cap;
+            Center center;
+            center.simulate(300, false);
+            vips = center.getNumVIP(); combos = center.getNumCombo(); remotes = center.getNumRemote();
+        }
+        checkTrue("the run generated VIP, COMBO and remote cars", vips > 0 && combos > 0 && remotes > 0);
+    }
+
+#ifdef _DEBUG
+    // ------------------------------------------------------------------
+    // TEST 6: no memory leak. Center must delete every car and bay exactly once.
+    //   Only in the Debug build (uses the Visual Studio memory checker).
+    // ------------------------------------------------------------------
+    static void testNoLeaks()
+    {
+        std::cout << "\n--- Memory leaks (Debug build) ---" << std::endl;
+        srand(5);
+        _CrtMemState before, after, diff;
+        _CrtMemCheckpoint(&before);
+        {
+            CaptureCout cap;
+            Center center;
+            center.simulate(300, false);
+        }
+        _CrtMemCheckpoint(&after);
+        // (the run includes combo cars that hold two bays and rescued cars that hold a van)
+        checkTrue("no memory is left allocated after Center is destroyed", !_CrtMemDifference(&diff, &before, &after));
+    }
+#endif
+
+    int main()
+    {
+        testLabClassAdditions();
+        testDerivedCounters();
+        testPrintFormats();
+        testUI();
+        testSimulation();
+        testBonus();
+#ifdef _DEBUG
+        testNoLeaks();
+#endif
+        std::cout << "\n=============================\n" << passed << " passed, " << failed << " failed" << std::endl;
+        return failed;
+    }
+*/
+
 // ===================== ACTIVE CODE: Phase 1 simulation (Member 4) =====================
 // Phase 1.2 main: runs the random simulation.
 //   Carservice.exe          -> interactive: prints all lists every timestep, press a key to continue
-//   Carservice.exe auto     -> no printing, no key press: only the final summary (for quick checks)
-//   Carservice.exe test    -> run all the tests of the project (see Tests.cpp)
+//   Carservice.exe auto     -> no printing, no key press: only the final summary (for quick checking)
 //   Carservice.exe [auto] N -> use N cars instead of 1000 (N must be at most 5000, the stack size)
 //
-// The old Member 1/2/3 test code is kept above (commented out). The same tests also run from Tests.cpp.
+// The tests of every member are kept above, each in a commented block with its own main().
+// To run one of them: comment out the main() below, then remove the comment markers around that block.
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
 #include <cstring>
 #include "Center.h"
 
-int runAllTests();     // defined in Tests.cpp: runs every test of the project, returns the number of failed checks
-
 int main(int argc, char* argv[])
 {
-    // "Carservice.exe test": run the tests instead of the simulation (exit code 0 = all passed)
-    if (argc > 1 && std::strcmp(argv[1], "test") == 0)
-        return runAllTests() == 0 ? 0 : 1;
-
     // Default settings: interactive screen, 1000 cars.
     bool interactive = true;
     int numCars = 1000;
@@ -693,5 +1196,3 @@ int main(int argc, char* argv[])
     center.simulate(numCars, interactive);
     return 0;
 }
-
-
