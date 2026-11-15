@@ -656,6 +656,8 @@ int main()
 // Phase 1.2 main: runs the random simulation.
 //   Carservice.exe          -> interactive: prints all lists every timestep, press a key to continue
 //   Carservice.exe auto     -> no printing, no key press: only the final summary (for quick checks)
+//   Carservice.exe nobonus  -> turn the bonus features (VIP, COMBO, Rescue Unit) OFF: plain Phase 1 only
+//                              (the bonus is ON by default; "bonus" also exists but is not needed)
 //   Carservice.exe test     -> run all the tests of the project (see Tests.cpp)
 //   Carservice.exe [auto] N -> use N cars instead of 1000 (N must be at most 5000, the stack size)
 //
@@ -674,11 +676,14 @@ int main(int argc, char* argv[])
         return runAllTests() == 0 ? 0 : 1;
 
     bool interactive = true;
+    bool withBonus = true;      // the bonus features run by default (use "nobonus" for the plain Phase 1 version)
     int numCars = 1000;
 
     for (int i = 1; i < argc; i++)
     {
         if (std::strcmp(argv[i], "auto") == 0) interactive = false;
+        else if (std::strcmp(argv[i], "bonus") == 0) withBonus = true;
+        else if (std::strcmp(argv[i], "nobonus") == 0) withBonus = false;
         else numCars = std::atoi(argv[i]);
     }
     if (numCars < 1 || numCars > 5000) numCars = 1000;
@@ -686,7 +691,7 @@ int main(int argc, char* argv[])
     srand((unsigned)time(0));
 
     Center center;
-    center.simulate(numCars, interactive);
+    center.simulate(numCars, interactive, withBonus);
     return 0;
 }
 

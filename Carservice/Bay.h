@@ -93,6 +93,21 @@ public:
     const char* getFreeTag() const { return "W"; }
 };
 
+// ------------------------------------------------------------
+// BONUS (Rescue Unit): a mobile van ("RB") that drives to a remote car.
+// speed = how many km the van drives in one timestep. A van carries one car at a time.
+class RescueBay : public Bay
+{
+    int speed;
+
+public:
+    RescueBay(int i = 0, int spd = 10) : Bay(i), speed(spd) {}
+    int getSpeed() const { return speed; }
+
+    const char* getTag() const { return "RB"; }
+    const char* getFreeTag() const { return "R"; }
+};
+
 // Bay in use ("D4", "MB9", "EB5", "WB2"): used when a car prints the bay it points to
 inline ostream& operator<<(ostream& out, const Bay* b)
 {
@@ -105,6 +120,12 @@ inline ostream& operator<<(ostream& out, const Bay* b)
 inline ostream& operator<<(ostream& out, DiagBay* b) { b->printFree(out); return out; }
 inline ostream& operator<<(ostream& out, MechBay* b) { b->printFree(out); return out; }
 inline ostream& operator<<(ostream& out, ElecBay* b) { b->printFree(out); return out; }
+inline ostream& operator<<(ostream& out, RescueBay* b)     // "R1(10km/step)"
+{
+    b->printFree(out);
+    out << "(" << b->getSpeed() << "km/step)";
+    return out;
+}
 inline ostream& operator<<(ostream& out, WashBay* b)
 {
     b->printFree(out);

@@ -4,7 +4,8 @@ using namespace std;
 #include "QueueLinked.h"
 #include "Bay.h"           // needed to print the bay a car points to
 
-enum CarStatus { IDLE, ERLY, LATE, REDY, DIAG, WAIT, SERV, CNCL, FNSH };
+// RMOT and RESC are used only by the bonus (remote cars waiting for / being fetched by a rescue van)
+enum CarStatus { IDLE, ERLY, LATE, REDY, DIAG, WAIT, SERV, CNCL, FNSH, RMOT, RESC };
 enum ServiceType { SVC_MU, SVC_EU, SVC_WU };
 enum SeqType { SS, FS };   // Strict Sequence / Flexible Sequence
 
@@ -41,12 +42,19 @@ private:
     int CT;                // cancel timestep
     int bayEntryTime;      // timestep the car entered its current bay
 
+    // ---- bonus features (all default to "normal car") ----
+    int  vipLevel;         // 0 = normal car, 1..3 = VIP (3 = highest)
+    bool combo;            // true = needs ONE combined MB + EB service (no service list)
+    int  distanceKM;       // > 0 = remote car, this far from the center
+    Bay* assignedBay2;     // second bay of a combo car (the EB), nullptr otherwise
+
 public:
     Car(int id, int pt, int vt, int dd)
         : CID(id), PT(pt), VT(vt), DD(dd),
         serviceCount(0), seqType(SS),
         status(IDLE), assignedBay(nullptr),
-        TW(0), TS(0), FT(0), CT(0), bayEntryTime(0)
+        TW(0), TS(0), FT(0), CT(0), bayEntryTime(0),
+        vipLevel(0), combo(false), distanceKM(0), assignedBay2(nullptr)
     {
     }
 
@@ -66,6 +74,10 @@ public:
     SeqType   getSeqType() const { return seqType; }
     CarStatus getStatus() const { return status; }
     Bay* getAssignedBay() const { return assignedBay; }
+    Bay* getAssignedBay2() const { return assignedBay2; }     // bonus: second bay of a combo car
+    int  getVIPLevel() const { return vipLevel; }              // bonus: 0 = not a VIP
+    bool isCombo() const { return combo; }                     // bonus
+    int  getDistance() const { return distanceKM; }            // bonus: > 0 = remote car
     int       getTW() const { return TW; }
     int       getTS() const { return TS; }
     int       getFT() const { return FT; }
@@ -80,6 +92,10 @@ public:
     void setSeqType(SeqType s) { seqType = s; }
     void setStatus(CarStatus s) { status = s; }
     void setAssignedBay(Bay* b) { assignedBay = b; }   // nullptr when leaving the bay
+    void setAssignedBay2(Bay* b) { assignedBay2 = b; } // bonus: nullptr when leaving the bay
+    void setVIPLevel(int l) { vipLevel = l; }          // bonus
+    void setCombo(bool c) { combo = c; }               // bonus
+    void setDistance(int km) { distanceKM = km; }      // bonus
     void setBayEntryTime(int t) { bayEntryTime = t; }
     void setFinishTime(int t) { FT = t; }
     void setCancelTime(int t) { CT = t; FT = t; }    // cancelled: FT = CT
@@ -189,8 +205,14 @@ public:
     //   otherwise   : [CarID, VT, PT]   e.g. [C43, 90, 82]
     void print(std::ostream& out) const
     {
-        if ((status == DIAG || status == SERV) && assignedBay)
-            out << "[C" << CID << ", " << assignedBay << "]";
+        if (status == RMOT)                                  // bonus: waiting for a rescue van
+            out << "[C" << CID << ", " << distanceKM << "km]";
+        else if ((status == DIAG || status == SERV || status == RESC) && assignedBay)
+        {
+            out << "[C" << CID << ", " << assignedBay;
+            if (assignedBay2) out << "+" << assignedBay2;    // bonus: combo car uses two bays
+            out << "]";
+        }
         else if (status == FNSH || status == CNCL)
             out << "[C" << CID << ", " << FT << "]";
         else

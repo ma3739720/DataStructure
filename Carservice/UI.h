@@ -4,8 +4,7 @@
 //  Responsible for all console input / output.
 //  It receives REFERENCES to the lists and only calls each list's print function
 //  (it does not know how a list is stored, and it is not a friend of Center).
-//  It does NOT read or write the input / output files: it only asks for their names.
-//  Header-only: every function is inline, there is no UI.cpp.
+//  It does NOT read or write the input / output files (there are no files in Phase 1).
 // ============================================================
 #include <iostream>
 #include <string>
@@ -25,7 +24,7 @@
 
 class UI
 {
-    static void header(std::ostream& out, const std::string& title);
+    static void header(std::ostream& out, const std::string& title, char fill);
 
 public:
     // ---- printing: step 2.11 of the simulation ----
@@ -37,6 +36,12 @@ public:
         priQueue<Car*>& inServ,
         ArrayStack<Car*>& cancelled, ArrayStack<Car*>& finished);
 
-    // "PRESS ANY KEY TO MOVE TO NEXT TIME STEP"
+    // ---- BONUS lists: VIP, COMBO, remote cars and the rescue vans ----
+    void printBonus(
+        priQueue<Car*>& vipRedy, priQueue<Car*>& vipMU, priQueue<Car*>& vipEU, priQueue<Car*>& vipWU,
+        LinkedQueue<Car*>& waitCombo, LinkedQueue<Car*>& rmot,
+        priQueue<Car*>& rescuing, LinkedQueue<RescueBay*>& freeRB);
+
+    // "PRESS ANY KEY TO MOVE TO NEXT STEP !"
     void waitForKey();
 };

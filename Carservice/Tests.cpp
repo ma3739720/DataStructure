@@ -889,8 +889,14 @@ namespace m4
             out = cap.str();
         }
 
-        checkTrue("shows the timestep", contains(out, "Current Timestep: 7"));
-        std::string idleText = between(out, "IDLE Cars", "ERLY Cars");
+        checkTrue("shows the timestep", contains(out, "Current Timestep:7"));
+        checkTrue("section headers follow the Program Interface page",
+            contains(out, "ERLY & LATE & REDY Cars [CarID, VT, PT]") &&
+            contains(out, "DIAG Cars [CarID, Diag Bay ID]") &&
+            contains(out, "In-Service Cars [CarID, Bay ID]") &&
+            contains(out, "CNCL Cars [CarID, CancelTime]") &&
+            contains(out, "FNSH Cars [CarID, FinishTime]"));
+        std::string idleText = between(out, "IDLE Cars", "ERLY & LATE & REDY");
         checkTrue("IDLE shows the total count (20)", contains(idleText, "20 cars:"));
         checkTrue("IDLE prints only the first 15 cars", countOf(idleText, "[C1") == 15);   // car ids are 100..119 (the header "[CarID" does not match)
         checkTrue("IDLE says 'and so on' when more cars exist", contains(idleText, "and so on"));
@@ -990,6 +996,136 @@ namespace m4
         checkTrue("10 random runs of 200 cars all end with every car in FNSH or CNCL", allOk);
     }
 
+    // ------------------------------------------------------------------
+    // TEST 5b: BONUS (VIP cars, COMBO cars, Rescue Unit)
+    //   - VIP priority order (level first, then earlier entry) and that the priority queue serves it
+    //   - van travel time = distance / speed rounded up
+    //   - the print formats of remote, rescued and combo cars, and the bonus part of the screen
+    //   - the whole simulation with the bonus on: every car still ends in FNSH or CNCL
+    // ------------------------------------------------------------------
+    static void testBonus()
+    {
+        std::cout << "\n--- BONUS: VIP, COMBO, Rescue Unit ---" << std::endl;
+
+        // ---- VIP priority ----
+        checkTrue("VIP: level 3 beats level 2 beats level 1 (same entry time)",
+            Center::vipPriority(3, 10) > Center::vipPriority(2, 10) &&
+            Center::vipPriority(2, 10) > Center::vipPriority(1, 10));
+        checkTrue("VIP: same level, the car that entered earlier goes first",
+            Center::vipPriority(2, 10) > Center::vipPriority(2, 11));
+        checkTrue("VIP: a high level beats a low level even if it entered much later",
+            Center::vipPriority(3, 5000) > Center::vipPriority(1, 1));
+
+        Car v1(1, 0, 0, 0), v2(2, 0, 0, 0), v3(3, 0, 0, 0), v4(4, 0, 0, 0);
+        priQueue<Car*> q;
+        q.enqueue(&v1, Center::vipPriority(1, 5));       // level 1, early
+        q.enqueue(&v2, Center::vipPriority(3, 9));       // level 3, late
+        q.enqueue(&v3, Center::vipPriority(3, 7));       // level 3, earlier
+        q.enqueue(&v4, Center::vipPriority(2, 1));       // level 2
+        int order[4], n = 0, pri;
+        Car* c = nullptr;
+        while (q.dequeue(c, pri)) order[n++] = c->getID();
+        checkTrue("VIP list serves C3, C2, C4, C1 (level first, then earlier entry)",
+            n == 4 && order[0] == 3 && order[1] == 2 && order[2] == 4 && order[3] == 1);
+
+        // ---- Rescue van travel time ----
+        checkTrue("travel time 25 km at 10 km/step = 3 steps", Center::travelTime(25, 10) == 3);
+        checkTrue("travel time 30 km at 10 km/step = 3 steps", Center::travelTime(30, 10) == 3);
+        checkTrue("travel time 31 km at 10 km/step = 4 steps (rounded up)", Center::travelTime(31, 10) == 4);
+        checkTrue("travel time 1 km at 20 km/step = 1 step (never 0)", Center::travelTime(1, 20) == 1);
+        checkTrue("the faster van is never slower", Center::travelTime(55, 20) <= Center::travelTime(55, 10));
+
+        // ---- print formats ----
+        RescueBay rb(1, 10);
+        MechBay mb(2); ElecBay eb(1);
+        std::ostringstream o;
+
+        Car remote(7, 40, 40, 0);
+        remote.setDistance(35); remote.setStatus(RMOT);
+        o << &remote;
+        checkTrue("remote car waiting prints [CarID, distance]", o.str() == "[C7, 35km]");
+
+        remote.setStatus(RESC); remote.setAssignedBay(&rb);
+        o.str(""); o << &remote;
+        checkTrue("remote car being rescued prints [CarID, van]", o.str() == "[C7, RB1]");
+
+        Car combo(8, 10, 10, 0);
+        combo.setCombo(true); combo.setStatus(SERV);
+        combo.setAssignedBay(&mb); combo.setAssignedBay2(&eb);
+        o.str(""); o << &combo;
+        checkTrue("combo car in service prints both bays", o.str() == "[C8, MB2+EB1]");
+
+        o.str(""); o << &rb;
+        checkTrue("free van prints ID and speed", o.str() == "R1(10km/step)");
+        checkTrue("a normal car has no bonus data", !v1.isCombo() && v1.getVIPLevel() == 0 && v1.getDistance() == 0);
+
+        // ---- the bonus part of the screen ----
+        priQueue<Car*> vipRedy, vipMU, vipEU, vipWU, rescuing;
+        LinkedQueue<Car*> waitCombo, rmot;
+        LinkedQueue<RescueBay*> freeRB;
+        Car vip(9, 20, 20, 0); vip.setVIPLevel(2); vip.setStatus(REDY);
+        Car cw(10, 30, 30, 0); cw.setCombo(true); cw.setStatus(WAIT);
+        Car rm(11, 50, 50, 0); rm.setDistance(12); rm.setStatus(RMOT);
+        Car rs(12, 60, 60, 0); rs.setDistance(40); rs.setStatus(RESC); rs.setAssignedBay(&rb);
+        RescueBay rb2(2, 20);
+        vipRedy.enqueue(&vip, Center::vipPriority(2, 5));
+        waitCombo.enqueue(&cw);
+        rmot.enqueue(&rm);
+        rescuing.enqueue(&rs, -20);
+        freeRB.enqueue(&rb2);
+
+        UI ui;
+        std::string out;
+        {
+            CaptureCout cap;
+            ui.printBonus(vipRedy, vipMU, vipEU, vipWU, waitCombo, rmot, rescuing, freeRB);
+            out = cap.str();
+        }
+        checkTrue("screen: VIP section", contains(out, "1 VIP REDY: [C9, 20, 20]") && contains(out, "0 VIP MB waiting:"));
+        checkTrue("screen: COMBO section", contains(out, "1 COMBO waiting: [C10, 30, 30]"));
+        checkTrue("screen: RMOT section", contains(out, "1 RMOT: [C11, 12km]"));
+        checkTrue("screen: rescue vans section", contains(out, "1 RB free: R2(20km/step)") && contains(out, "1 Cars in Rescue: [C12, RB1]"));
+        checkTrue("screen: printing changed nothing",
+            vipRedy.GetCount() == 1 && waitCombo.GetCount() == 1 && rmot.GetCount() == 1 &&
+            rescuing.GetCount() == 1 && freeRB.GetCount() == 1);
+
+        // ---- the whole simulation with the bonus on ----
+        int sizes[] = { 1, 10, 100, 1000 };
+        for (int k = 0; k < 4; k++)
+        {
+            srand(2000 + k);
+            int fin, can;
+            {
+                CaptureCout cap;
+                Center center;
+                center.simulate(sizes[k], false, true);
+                fin = center.getFinishedCount();
+                can = center.getCancelledCount();
+            }
+            checkTrue("bonus simulate(" + std::to_string(sizes[k]) + " cars): FNSH + CNCL == cars generated",
+                fin + can == sizes[k]);
+        }
+
+        srand(11);
+        int vips = 0, combos = 0, remotes = 0;
+        {
+            CaptureCout cap;
+            Center center;
+            center.simulate(300, false, true);
+            vips = center.getNumVIP(); combos = center.getNumCombo(); remotes = center.getNumRemote();
+        }
+        checkTrue("bonus run generated VIP, COMBO and remote cars", vips > 0 && combos > 0 && remotes > 0);
+
+        srand(11);
+        {
+            CaptureCout cap;
+            Center center;
+            center.simulate(300, false, false);
+            vips = center.getNumVIP(); combos = center.getNumCombo(); remotes = center.getNumRemote();
+        }
+        checkTrue("with the bonus off there are no VIP, COMBO or remote cars", vips == 0 && combos == 0 && remotes == 0);
+    }
+
 #ifdef _DEBUG
     // ------------------------------------------------------------------
     // TEST 6: no memory leak. Center must delete every car and bay exactly once.
@@ -1008,6 +1144,17 @@ namespace m4
         }
         _CrtMemCheckpoint(&after);
         checkTrue("no memory is left allocated after Center is destroyed", !_CrtMemDifference(&diff, &before, &after));
+
+        // the same with the bonus on (combo cars hold two bays, rescued cars hold a van)
+        srand(6);
+        _CrtMemCheckpoint(&before);
+        {
+            CaptureCout cap;
+            Center center;
+            center.simulate(300, false, true);
+        }
+        _CrtMemCheckpoint(&after);
+        checkTrue("no memory is left allocated after a BONUS run", !_CrtMemDifference(&diff, &before, &after));
     }
 #endif
 
@@ -1018,6 +1165,7 @@ namespace m4
         testPrintFormats();
         testUI();
         testSimulation();
+        testBonus();
 #ifdef _DEBUG
         testNoLeaks();
 #endif
