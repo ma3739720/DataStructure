@@ -187,8 +187,9 @@ int main()
 }*/
 //Aya Test
 
+//3mr test
 
-#include <iostream>
+/*#include <iostream>
 #include <sstream>
 #include <string>
 #include "ListPrinters.h"
@@ -477,5 +478,169 @@ int main()
 
     std::cout << "\n=============================" << std::endl;
     std::cout << passed << " passed, " << failed << " failed" << std::endl;
+    return failed;
+}*/
+// 3amr test
+// Member 1 tests: Car, Service, Bay classes, printing.
+// To use: add this file to the project and temporarily exclude main.cpp
+// (or rename this main to main1). Needs only Car.h and Bay.h.
+#include <iostream>
+#include <sstream>
+#include <string>
+#include "Car.h"
+#include "Bay.h"
+
+static int passed = 0, failed = 0;
+
+static void checkTrue(const string& name, bool ok)
+{
+    if (ok) { passed++; cout << "PASS  " << name << endl; }
+    else { failed++; cout << "FAIL  " << name << endl; }
+}
+static void check(const string& name, const string& got, const string& expected)
+{
+    if (got == expected) { passed++; cout << "PASS  " << name << endl; }
+    else { failed++; cout << "FAIL  " << name << "\n   expected: [" << expected << "]\n   got:      [" << got << "]" << endl; }
+}
+
+static void testCarBasics()
+{
+    cout << "\n--- Car basics ---" << endl;
+    Car c(7, 50, 45, 3);
+    checkTrue("ID/PT/VT/DD stored", c.getID() == 7 && c.getPT() == 50 && c.getVT() == 45 && c.getDD() == 3);
+    checkTrue("starts IDLE", c.getStatus() == IDLE);
+    checkTrue("no assigned bay at start", c.getAssignedBay() == nullptr);
+    checkTrue("TW, TS start at 0", c.getTW() == 0 && c.getTS() == 0);
+    checkTrue("no services at start", !c.hasMoreServices() && c.getServiceCount() == 0);
+
+    c.setStatus(REDY);  checkTrue("setStatus", c.getStatus() == REDY);
+    c.setSeqType(FS);   checkTrue("setSeqType FS", c.getSeqType() == FS);
+    c.setPT(80); c.setVT(60);
+    checkTrue("reschedule: setPT/setVT", c.getPT() == 80 && c.getVT() == 60);
+
+    c.addWaitTime(4); c.addWaitTime(6); c.addServiceTime(5);
+    checkTrue("TW accumulates (4+6=10)", c.getTW() == 10);
+    checkTrue("TS accumulates (5)", c.getTS() == 5);
+
+    c.setFinishTime(90);
+    checkTrue("setFinishTime", c.getFT() == 90);
+    c.setCancelTime(70);
+    checkTrue("cancel: CT = 70 and FT = CT", c.getCT() == 70 && c.getFT() == 70);
+
+    c.setBayEntryTime(12);
+    checkTrue("bay entry time", c.getBayEntryTime() == 12);
+
+    DiagBay d(2);
+    c.setAssignedBay(&d);
+    checkTrue("assigned bay set", c.getAssignedBay() == &d);
+    c.setAssignedBay(nullptr);
+    checkTrue("assigned bay cleared", c.getAssignedBay() == nullptr);
+}
+
+static void testServices()
+{
+    cout << "\n--- Services (SS: front access) ---" << endl;
+    Car c(1, 0, 0, 0);
+    c.addService(SVC_MU, 5);
+    c.addService(SVC_EU, 3);
+    c.addService(SVC_MU, 2);
+    checkTrue("3 services added", c.getServiceCount() == 3 && c.hasMoreServices());
+
+    ServiceType t; int d;
+    checkTrue("peek returns first", c.peekNextService(t, d) && t == SVC_MU && d == 5);
+    checkTrue("peek does not remove", c.getServiceCount() == 3);
+    checkTrue("take returns first (MU 5)", c.takeNextService(t, d) && t == SVC_MU && d == 5);
+    checkTrue("take returns second (EU 3)", c.takeNextService(t, d) && t == SVC_EU && d == 3);
+    checkTrue("1 service left", c.getServiceCount() == 1);
+    checkTrue("take returns third (MU 2)", c.takeNextService(t, d) && t == SVC_MU && d == 2);
+    checkTrue("no more services", !c.hasMoreServices());
+    checkTrue("peek on empty is false", !c.peekNextService(t, d));
+    checkTrue("take on empty is false", !c.takeNextService(t, d));
+
+    cout << "\n--- Services (FS: by type) ---" << endl;
+    Car f(2, 0, 0, 0);
+    f.addService(SVC_MU, 5);
+    f.addService(SVC_EU, 3);
+    f.addService(SVC_MU, 2);
+    f.addService(SVC_WU, 4);
+    checkTrue("hasService MU / EU / WU", f.hasService(SVC_MU) && f.hasService(SVC_EU) && f.hasService(SVC_WU));
+    checkTrue("hasService keeps the count", f.getServiceCount() == 4);
+    checkTrue("MU time = 5+2 = 7", f.getServiceTimeFor(SVC_MU) == 7);
+    checkTrue("EU time = 3", f.getServiceTimeFor(SVC_EU) == 3);
+    checkTrue("total remaining = 14", f.getTotalRemainingServiceTime() == 14);
+    checkTrue("queries did not change the order", f.peekNextService(t, d) && t == SVC_MU && d == 5);
+
+    checkTrue("takeService(EU) gives 3", f.takeService(SVC_EU, d) && d == 3);
+    checkTrue("EU is gone", !f.hasService(SVC_EU) && f.getServiceCount() == 3);
+    checkTrue("takeService(MU) takes the FIRST MU (5)", f.takeService(SVC_MU, d) && d == 5);
+    checkTrue("the other MU (2) is still there", f.getServiceTimeFor(SVC_MU) == 2);
+    checkTrue("takeService of a missing type is false", !f.takeService(SVC_EU, d));
+    checkTrue("remaining order is MU 2 then WU 4",
+        f.takeNextService(t, d) && t == SVC_MU && d == 2 && f.takeNextService(t, d) && t == SVC_WU && d == 4);
+}
+
+static void testCarPrint()
+{
+    cout << "\n--- Car printing ---" << endl;
+    Car c(43, 82, 90, 3);
+    ostringstream o;
+    o << &c;                       // operator<<(ostream&, const Car*)
+    check("operator<< Car*", o.str(), "[C43, 90, 82]");
+    o.str(""); c.print(o);
+    check("Car::print", o.str(), "[C43, 90, 82]");
+}
+
+static void testBays()
+{
+    cout << "\n--- Bays ---" << endl;
+    DiagBay d(4); MechBay m(9); ElecBay e(5); WashBay w(2, 3);
+    checkTrue("IDs", d.getID() == 4 && m.getID() == 9 && e.getID() == 5 && w.getID() == 2);
+
+    ostringstream o;
+    o << (Bay*)&d << " " << (Bay*)&m << " " << (Bay*)&e << " " << (Bay*)&w;
+    check("operator<< bays (in-service names)", o.str(), "D4 MB9 EB5 WB2");
+    o.str("");
+    d.printFree(o); o << " "; m.printFree(o); o << " "; e.printFree(o); o << " "; w.printFree(o);
+    check("free-list names", o.str(), "D4 M9 E5 W2");
+
+    // single-car bays
+    checkTrue("MechBay starts free", m.isFree());
+    m.occupy();
+    checkTrue("MechBay busy after occupy", !m.isFree());
+    m.release();
+    checkTrue("MechBay free after release", m.isFree());
+    d.occupy(); checkTrue("DiagBay busy", !d.isFree());
+    d.release(); checkTrue("DiagBay free again", d.isFree());
+
+    // wash bay: many cars
+    checkTrue("WashBay capacity 3, free 3, empty", w.getCapacity() == 3 && w.getFreeCapacity() == 3 && w.isEmpty());
+    w.occupy();
+    checkTrue("1 car: free capacity 2, still free", w.getFreeCapacity() == 2 && w.isFree() && !w.isEmpty());
+    w.occupy(); w.occupy();
+    checkTrue("3 cars: full", w.getFreeCapacity() == 0 && !w.isFree());
+    w.occupy();
+    checkTrue("occupy when full does nothing", w.getUsed() == 3 && w.getFreeCapacity() == 0);
+    w.release();
+    checkTrue("1 car left: free again, capacity 1", w.isFree() && w.getFreeCapacity() == 1);
+    w.release(); w.release(); w.release();
+    checkTrue("release on empty does nothing", w.getUsed() == 0 && w.getFreeCapacity() == 3);
+
+
+    Bay* arr[4] = { &d, &m, &e, &w };
+    o.str("");
+    for (int i = 0; i < 4; i++) o << arr[i] << " ";
+    check("Bay* array prints right names", o.str(), "D4 MB9 EB5 WB2 ");
+    checkTrue("no crash deleting through Bay* (virtual dtor)", true);
+    Bay* heap = new WashBay(1, 2);
+    delete heap;
+}
+
+int main()
+{
+    testCarBasics();
+    testServices();
+    testCarPrint();
+    testBays();
+    cout << "\n=============================\n" << passed << " passed, " << failed << " failed" << endl;
     return failed;
 }
