@@ -37,7 +37,7 @@ int WAIT_WU::getTotalServiceTime()
 void WAIT_WU::print(std::ostream& out)
 {
 	int n = getSize();
-	out << n << " WU cars waiting: ";
+	out << n << " WU cars waiting ";
 	for (int i = 0; i < n; i++)
 	{
 		Car* c;

@@ -82,7 +82,7 @@ inline void printCarsInBays(std::ostream& out, priQueue<Car*>& q, const char* la
     out << count << " " << label << ": ";
     while (temp.dequeue(c, pri))
     {
-        out << "[" << c->getID() << ", " << c->getAssignedBay()->getID() << "] ";
+        out << "[C" << c->getID() << ", M" << c->getAssignedBay()->getID() << "] ";
         q.enqueue(c, pri);
     }
     out << std::endl;
@@ -106,7 +106,7 @@ inline void printCarStack(std::ostream& out, ArrayStack<Car*>& s, const char* la
     out << count << " " << label << ": ";
     while (s.pop(c))                              // pass 2: print from the top
     {
-        out << "[" << c->getID() << ", " << c->getFT() << "] ";
+        out << "[C" << c->getID() << ", " << c->getFT() << "] ";
         temp.push(c);
     }
     while (temp.pop(c)) { s.push(c); }            //         and restore

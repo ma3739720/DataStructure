@@ -37,7 +37,7 @@ int WAIT_MU::getTotalServiceTime()
 void WAIT_MU::print(std::ostream& out)
 {
 	int n = getSize();
-	out << n << " MU cars waiting: ";
+	out << n << " MU cars waiting ";
 	for (int i = 0; i < n; i++)
 	{
 		Car* c;

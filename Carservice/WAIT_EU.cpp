@@ -37,7 +37,7 @@ int WAIT_EU::getTotalServiceTime()
 void WAIT_EU::print(std::ostream& out)
 {
 	int n = getSize();
-	out << n << " EB cars waiting: ";
+	out << n << " EU cars waiting ";
 	for (int i = 0; i < n; i++)
 	{
 		Car* c;
