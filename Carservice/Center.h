@@ -90,10 +90,14 @@ class Center
     void cancelCar(Car* c);                   // -> CNCL stack
     void finishCar(Car* c);                   // -> FNSH stack
     void releaseBay(Car* c);                  // car leaves its bay, bay goes back to its free list
-    void sendToRandomWait(Car* c);            // -> one of WAIT_MU / WAIT_EU / WAIT_WU
+    void sendToRandomWait(Car* c);            // -> one of WAIT_MU / WAIT_EU / WAIT_WU 
+
+    void sendToWaitList(Car* c);              // salma: SS / FS routing to the right WAIT list
+    void startService(Car* c, Bay* b, int dur); // salma: car enters a service bay
+
     void cancelRandomLateNotTop();            // random LATE car except the first one -> CNCL
     void releaseOne(Bay* b);                  // one bay goes back to its free list
-    void createRescueUnits();               
+    void createRescueUnits();
 
     // One function per step of the simulation 
     void step_IdleToLists();      // 2.1

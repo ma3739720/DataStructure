@@ -29,9 +29,9 @@ Center::~Center()
     // Cars still holding a bay: the bay is NOT in any free list while it is busy, so it must be
     // deleted together with the car or it would leak.
     // (a combo car holds two bays, a rescued car holds its van)
-    while (DIAG_Cars.dequeue(c, pri))   { delete c->getAssignedBay(); delete c->getAssignedBay2(); delete c; }
+    while (DIAG_Cars.dequeue(c, pri)) { delete c->getAssignedBay(); delete c->getAssignedBay2(); delete c; }
     while (InServ_cars.dequeue(c, pri)) { delete c->getAssignedBay(); delete c->getAssignedBay2(); delete c; }
-    while (RESC_Cars.dequeue(c, pri))   { delete c->getAssignedBay(); delete c; }
+    while (RESC_Cars.dequeue(c, pri)) { delete c->getAssignedBay(); delete c; }
 
     // bonus lists
     while (VIP_REDY.dequeue(c, pri))    delete c;
@@ -89,7 +89,7 @@ void Center::generateCars(int n)
     {
         int vt = 1 + rand() % 2000;                  // arrival time: 1 .. 2000
 
-        
+
         // What kind of car is this?
         // kind 0..9 = remote, 10..19 = combo, 20..29 = VIP, the rest = normal car
         int kind = rand() % 100;
@@ -104,8 +104,8 @@ void Center::generateCars(int n)
         c->setSeqType(rand() % 2 ? FS : SS);     // strict or flexible sequence, 50% each
 
         if (remote) { c->setDistance(5 + rand() % (MAX_DISTANCE - 4)); numRemote++; }   // 5 .. 60 km
-        if (combo)  { c->setCombo(true);                               numCombo++; }
-        if (vip)    { c->setVIPLevel(1 + rand() % 3);                  numVIP++; }
+        if (combo) { c->setCombo(true);                               numCombo++; }
+        if (vip) { c->setVIPLevel(1 + rand() % 3);                  numVIP++; }
 
         if (!combo)                              // a combo car has no service list: one combined service
         {
@@ -147,7 +147,7 @@ void Center::releaseOne(Bay* b)
 {
     if (!b) return;
 
-    if (DiagBay* d = dynamic_cast<DiagBay*>(b))      { d->release(); Free_D_List.enqueue(d); }
+    if (DiagBay* d = dynamic_cast<DiagBay*>(b)) { d->release(); Free_D_List.enqueue(d); }
     else if (MechBay* m = dynamic_cast<MechBay*>(b)) { m->release(); Free_MU_List.enqueue(m); }
     else if (ElecBay* e = dynamic_cast<ElecBay*>(b)) { e->release(); Free_EU_List.enqueue(e); }
     else if (RescueBay* r = dynamic_cast<RescueBay*>(b)) { r->release(); Free_RB_List.enqueue(r); }
@@ -308,7 +308,7 @@ void Center::step_RedyToDiag()
         c->setBayEntryTime(timestep);
         // The finish time is negative because the priQueue serves the HIGHEST number first:
         // the car that finishes earliest has the biggest (least negative) number.
-        DIAG_Cars.enqueue(c, -(timestep + DIAG_TIME));   // earliest finish = highest priority
+        DIAG_Cars.enqueue(c, -(timestep + c->getDD()));   // salma: earliest finish = highest priority
     }
 }
 
@@ -323,9 +323,70 @@ void Center::step_DiagToWait()
     {
         DIAG_Cars.dequeue(c, pri);
         releaseBay(c);
-        if (chance(20)) cancelCar(c);
-        else            sendToRandomWait(c);
+        if (chance(20))
+        {
+            c->addWaitTime(timestep - c->getVT() - c->getTS());   // salma: TW = CT - VT - TS
+            cancelCar(c);
+        }
+        else
+            sendToWaitList(c);                   // salma: SS / FS routing
     }
+}
+
+// ------------------------------------------------------------
+// salma new two functions for step 2.8 and 2.9
+// ------------------------------------------------------------
+
+// Choose the WAIT list for the car's next service.
+//   SS: the list of the FIRST service in its sequence.
+//   FS: among the service types the car still needs, the list with the smallest total
+//       service time of the cars already waiting in it.
+// Combo and VIP cars keep the same special lists as before.
+void Center::sendToWaitList(Car* c)
+{
+    c->setStatus(WAIT);
+    if (c->isCombo()) { WaitCombo.enqueue(c); return; }
+
+    ServiceType type = SVC_MU;
+    int dur;
+    if (c->getSeqType() == SS)
+    {
+        if (!c->peekNextService(type, dur)) { finishCar(c); return; }   // no service left
+    }
+    else
+    {
+        int best = -1;
+        for (int t = 0; t < 3; t++)
+        {
+            if (!c->hasService((ServiceType)t)) continue;
+            int total = (t == SVC_MU) ? WaitMU.getTotalServiceTime()
+                : (t == SVC_EU) ? WaitEU.getTotalServiceTime()
+                : WaitWU.getTotalServiceTime();
+            if (best == -1 || total < best) { best = total; type = (ServiceType)t; }
+        }
+        if (best == -1) { finishCar(c); return; }                       // no service left
+    }
+
+    if (c->getVIPLevel() > 0)                    // bonus: VIP list of the same type
+    {
+        int p = vipPriority(c->getVIPLevel(), timestep);
+        if (type == SVC_MU)      VIP_WaitMU.enqueue(c, p);
+        else if (type == SVC_EU) VIP_WaitEU.enqueue(c, p);
+        else                     VIP_WaitWU.enqueue(c, p);
+        return;
+    }
+    if (type == SVC_MU)      WaitMU.enqueue(c);
+    else if (type == SVC_EU) WaitEU.enqueue(c);
+    else                     WaitWU.enqueue(c);
+}
+
+// The car enters a service bay. The service ends after 'dur' timesteps.
+void Center::startService(Car* c, Bay* b, int dur)
+{
+    c->setAssignedBay(b);
+    c->setStatus(SERV);
+    c->setBayEntryTime(timestep);
+    InServ_cars.enqueue(c, -(timestep + dur));   // earliest finish = highest priority
 }
 
 // 2.8 / 2.9  6 tries: a random bay type is chosen (MB 60%, EB 30%, WB 10%). If a car is waiting
@@ -334,47 +395,37 @@ void Center::step_DiagToWait()
 
 void Center::step_WaitToServ()
 {
-    for (int i = 0; i < 6; i++)
+    Car* c; int pri; int dur; ServiceType type;
+
+    // Mechanical bays: every free MB takes the first waiting car (VIP list first, then FCFS)
+    while (!Free_MU_List.isEmpty() && (!VIP_WaitMU.isEmpty() || !WaitMU.isEmpty()))
     {
-        int r = rand() % 100;                    // 0..59 = MB, 60..89 = EB, 90..99 = WB
-        Car* c = nullptr;
-        Bay* b = nullptr;
-        int pri;
+        MechBay* m; Free_MU_List.dequeue(m);
+        if (!VIP_WaitMU.isEmpty()) VIP_WaitMU.dequeue(c, pri); else WaitMU.dequeue(c);
+        c->takeService(SVC_MU, dur);             // removes this service from the car's list
+        m->occupy();
+        startService(c, m, dur);
+    }
 
-        //for each bay type, the VIP list is checked BEFORE the normal WAIT list
-        if (r < 60)         // mechanical
-        {
-            bool vip = !VIP_WaitMU.isEmpty();
-            if ((!vip && WaitMU.isEmpty()) || Free_MU_List.isEmpty()) continue;   // no car or no bay: try again
-            MechBay* m;
-            if (vip) VIP_WaitMU.dequeue(c, pri); else WaitMU.dequeue(c);
-            Free_MU_List.dequeue(m);
-            m->occupy(); b = m;
-        }
-        else if (r < 90)    // electrical
-        {
-            bool vip = !VIP_WaitEU.isEmpty();
-            if ((!vip && WaitEU.isEmpty()) || Free_EU_List.isEmpty()) continue;
-            ElecBay* e;
-            if (vip) VIP_WaitEU.dequeue(c, pri); else WaitEU.dequeue(c);
-            Free_EU_List.dequeue(e);
-            e->occupy(); b = e;
-        }
-        else                // wash (a bay holds several cars)
-        {
-            bool vip = !VIP_WaitWU.isEmpty();
-            if ((!vip && WaitWU.isEmpty()) || Free_WU_List.isEmpty()) continue;
-            WashBay* w;
-            if (vip) VIP_WaitWU.dequeue(c, pri); else WaitWU.dequeue(c);
-            Free_WU_List.dequeue(w);
-            w->occupy(); b = w;
-            if (w->isFree()) Free_WU_List.enqueue(w);   // still has room: stays in the free list
-        }
+    // Electrical bays
+    while (!Free_EU_List.isEmpty() && (!VIP_WaitEU.isEmpty() || !WaitEU.isEmpty()))
+    {
+        ElecBay* e; Free_EU_List.dequeue(e);
+        if (!VIP_WaitEU.isEmpty()) VIP_WaitEU.dequeue(c, pri); else WaitEU.dequeue(c);
+        c->takeService(SVC_EU, dur);
+        e->occupy();
+        startService(c, e, dur);
+    }
 
-        c->setAssignedBay(b);                    // the car points to the bay it got
-        c->setStatus(SERV);
-        c->setBayEntryTime(timestep);
-        InServ_cars.enqueue(c, -(timestep + SERV_TIME));   // same negative-finish-time trick as DIAG_Cars
+    // Wash bays: a bay holds many cars, so it stays in the free list while it has room
+    while (!Free_WU_List.isEmpty() && (!VIP_WaitWU.isEmpty() || !WaitWU.isEmpty()))
+    {
+        WashBay* w; Free_WU_List.dequeue(w);
+        if (!VIP_WaitWU.isEmpty()) VIP_WaitWU.dequeue(c, pri); else WaitWU.dequeue(c);
+        c->takeService(SVC_WU, dur);
+        w->occupy();
+        if (w->isFree()) Free_WU_List.enqueue(w);   // still has room: stays in the free list
+        startService(c, w, dur);
     }
 }
 
@@ -386,11 +437,17 @@ void Center::step_ServToFinish()
     while (InServ_cars.peek(c, pri) && -pri <= timestep)   // same "look at the front only" idea as step 2.7
     {
         InServ_cars.dequeue(c, pri);
-        c->addServiceTime(SERV_TIME);            // this car spent SERV_TIME timesteps in a bay
+        int dur = -pri - c->getBayEntryTime();   // finish time - entry time = real service duration
+        c->addServiceTime(dur);
         releaseBay(c);
         // a combo car has only one (combined) service, so it leaves when it is done
-        if (c->isCombo() || chance(40)) finishCar(c);
-        else                            sendToRandomWait(c);
+        if (c->isCombo() || !c->hasMoreServices())
+        {
+            c->addWaitTime(timestep - c->getVT() - c->getTS());   // TW = FT - VT - TS
+            finishCar(c);
+        }
+        else
+            sendToWaitList(c);                   // next service: SS / FS routing
     }
 }
 
@@ -455,11 +512,11 @@ void Center::step_RescueDispatch()
 int Center::carsInSystem()
 {
     return IDLE_cars.GetCount() + ERLY_cars.GetCount() + LATE_cars.GetCount()
-         + REDY_cars.GetCount() + DIAG_Cars.GetCount()
-         + WaitMU.GetCount() + WaitEU.GetCount() + WaitWU.GetCount()
-         + InServ_cars.GetCount() + Cancelled_cars.GetCount() + Finished_cars.GetCount()
-         + VIP_REDY.GetCount() + VIP_WaitMU.GetCount() + VIP_WaitEU.GetCount() + VIP_WaitWU.GetCount()
-         + WaitCombo.GetCount() + RMOT_cars.GetCount() + RESC_Cars.GetCount();   // bonus lists
+        + REDY_cars.GetCount() + DIAG_Cars.GetCount()
+        + WaitMU.GetCount() + WaitEU.GetCount() + WaitWU.GetCount()
+        + InServ_cars.GetCount() + Cancelled_cars.GetCount() + Finished_cars.GetCount()
+        + VIP_REDY.GetCount() + VIP_WaitMU.GetCount() + VIP_WaitEU.GetCount() + VIP_WaitWU.GetCount()
+        + WaitCombo.GetCount() + RMOT_cars.GetCount() + RESC_Cars.GetCount();   // bonus lists
 }
 
 // Every car must be in exactly one list: the total never changes.
@@ -471,8 +528,8 @@ void Center::checkNoCarLost()
     if (n != totalCars)
     {
         std::cout << "\nERROR at timestep " << timestep << ": " << n
-                  << " cars found in the lists, but " << totalCars
-                  << " were generated (a car was lost or duplicated).\n";
+            << " cars found in the lists, but " << totalCars
+            << " were generated (a car was lost or duplicated).\n";
         std::exit(1);
     }
 }
@@ -485,14 +542,14 @@ void Center::simulate(int numCars, bool interactive)
     generateCars(numCars);                       // 1000 cars by default, all in IDLE
     UI ui;
 
-    const int MAX_STEPS = 10000;   
+    const int MAX_STEPS = 10000;
     int fnsh = 0, cncl = 0;
 
     while (timestep < MAX_STEPS)
     {
-        timestep++;                 
+        timestep++;
 
-       
+
         step_IdleToLists();      // 2.1
         step_ErlyToRedy();       // 2.2
         step_CancelLate();       // 2.3
@@ -510,11 +567,11 @@ void Center::simulate(int numCars, bool interactive)
         if (interactive)         // 2.11: print everything, then wait for a key
         {
             ui.printAll(timestep, IDLE_cars, ERLY_cars, LATE_cars, REDY_cars,
-                        Free_D_List, DIAG_Cars, WaitMU, WaitEU, WaitWU,
-                        Free_MU_List, Free_EU_List, Free_WU_List,
-                        InServ_cars, Cancelled_cars, Finished_cars);                 // 2.11
+                Free_D_List, DIAG_Cars, WaitMU, WaitEU, WaitWU,
+                Free_MU_List, Free_EU_List, Free_WU_List,
+                InServ_cars, Cancelled_cars, Finished_cars);                 // 2.11
             ui.printBonus(VIP_REDY, VIP_WaitMU, VIP_WaitEU, VIP_WaitWU,
-                          WaitCombo, RMOT_cars, RESC_Cars, Free_RB_List);
+                WaitCombo, RMOT_cars, RESC_Cars, Free_RB_List);
             ui.waitForKey();
         }
 
@@ -526,12 +583,12 @@ void Center::simulate(int numCars, bool interactive)
 
 
     cout << "\n===== Simulation finished =====\n"
-              << "Timesteps : " << timestep << "\n"
-              << "Cars      : " << totalCars << "\n"
-              << "FNSH      : " << fnsh << "\n"
-              << "CNCL      : " << cncl << "\n"
-              << "FNSH + CNCL == cars generated ? "
-              << (fnsh + cncl == totalCars ? "YES" : "NO") << "\n";
+        << "Timesteps : " << timestep << "\n"
+        << "Cars      : " << totalCars << "\n"
+        << "FNSH      : " << fnsh << "\n"
+        << "CNCL      : " << cncl << "\n"
+        << "FNSH + CNCL == cars generated ? "
+        << (fnsh + cncl == totalCars ? "YES" : "NO") << "\n";
     cout << "Bonus cars: " << numVIP << " VIP, " << numCombo << " COMBO, "
-              << numRemote << " remote (rescued by " << N_RB << " vans)\n";
+        << numRemote << " remote (rescued by " << N_RB << " vans)\n";
 }
