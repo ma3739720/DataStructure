@@ -4,14 +4,21 @@
 #include "UI.h"
 
 // true with probability pct %.   rand() % 100 is a number from 0 to 99, so "< pct" is true
-// pct times out of 100. The document uses probabilities in many steps (10%, 20%, 40% ...),
+// pct times out of 100. The document uses probabilities in many steps (Pcancel, Presc ...),
 // so this one helper is used everywhere instead of repeating the expression.
 static bool chance(int pct) { return rand() % 100 < pct; }
 
 // ------------------------------------------------------------
-// The constructor creates the bays and the rescue vans. The cars are created later, by simulate().
-Center::Center() : timestep(0), totalCars(0), numVIP(0), numCombo(0), numRemote(0)
+// The constructor creates the bays and the rescue vans. The cars are created later:
+//   - Phase 2: loadCar() is called by the input reader for every line of the file
+//   - random mode: simulate(numCars, ...) calls generateCars()
+// Pcancel / Presc start with the Phase 1 values; configure() replaces them with the file values.
+Center::Center() : timestep(1), totalCars(0), numVIP(0), numCombo(0), numRemote(0)
 {
+    Pcancel = 20;
+    Presc = 10;
+    onTimeArrived = 0;
+    onTimeSinceLate = 0;
     createBays();
     createRescueUnits();
 }
@@ -79,7 +86,52 @@ void Center::createRescueUnits()
     for (int i = 1; i <= N_RB; i++) Free_RB_List.enqueue(new RescueBay(i, 10 * i));
 }
 
-// Random IDLE cars. InsertCar keeps the IDLE list sorted by VT even though VT is random.
+// ------------------------------------------------------------
+//  PHASE 2: loading the scenario from the input file (called by Member 4's reader)
+// ------------------------------------------------------------
+
+// Lines 1-3 of the input file:  N_DU N_MU N_EU N_WU  /  WB_Cap  /  Pcancel Presc
+// The bays made by the constructor (default sizes) are deleted and made again with the file values.
+// Call this BEFORE loadCar() and before simulating.
+void Center::configure(int nDU, int nMU, int nEU, int nWU, int washCap, int pcancel, int presc)
+{
+    DiagBay* d; MechBay* m; ElecBay* e; WashBay* w;
+    while (Free_D_List.dequeue(d))  delete d;
+    while (Free_MU_List.dequeue(m)) delete m;
+    while (Free_EU_List.dequeue(e)) delete e;
+    while (Free_WU_List.dequeue(w)) delete w;
+
+    for (int i = 1; i <= nDU; i++) Free_D_List.enqueue(new DiagBay(i));
+    for (int i = 1; i <= nMU; i++) Free_MU_List.enqueue(new MechBay(i));
+    for (int i = 1; i <= nEU; i++) Free_EU_List.enqueue(new ElecBay(i));
+    for (int i = 1; i <= nWU; i++) Free_WU_List.enqueue(new WashBay(i, washCap));
+
+    Pcancel = pcancel;
+    Presc = presc;
+}
+
+// One car line of the input file:  VT CID PT DD.
+// The car starts in IDLE. Its services are NOT known yet: the diagnosis unit assigns them
+// at random when the diagnosis ends (see generateServices). InsertCar keeps IDLE sorted by VT.
+void Center::loadCar(int cid, int pt, int vt, int dd)
+{
+    Car* c = new Car(cid, pt, vt, dd);
+    IDLE_cars.InsertCar(c);
+    totalCars++;
+}
+
+// The diagnosis unit gives the car a RANDOM set of services and decides SS or FS.
+// Called once, when the diagnosis of the car ends.
+void Center::generateServices(Car* c)
+{
+    c->setSeqType(rand() % 2 ? FS : SS);         // strict or flexible sequence, 50% each
+    int nServices = 1 + rand() % 3;              // 1 to 3 services
+    for (int s = 0; s < nServices; s++)
+        c->addService((ServiceType)(rand() % 3), 1 + rand() % 5);   // random type, duration 1 .. 5
+}
+
+// Random IDLE cars (random mode, used when there is no input file).
+// InsertCar keeps the IDLE list sorted by VT even though VT is random.
 // (The document says the list is loaded from a file sorted by VT; here we create the cars
 // in random order and let InsertCar do the sorting.)
 void Center::generateCars(int n)
@@ -100,7 +152,7 @@ void Center::generateCars(int n)
         int pt = vt + rand() % 41 - 20;          // appointment time: -20 .. +20 around VT
         if (pt < 1) pt = 1;
         if (remote) pt = vt;                     // a remote car asks for help when it needs it: VT = PT
-        Car* c = new Car(i, pt, vt, DIAG_TIME);  // the only place where a car is created
+        Car* c = new Car(i, pt, vt, DIAG_TIME);  // the only place where a random car is created
         c->setSeqType(rand() % 2 ? FS : SS);     // strict or flexible sequence, 50% each
 
         if (remote) { c->setDistance(5 + rand() % (MAX_DISTANCE - 4)); numRemote++; }   // 5 .. 60 km
@@ -124,19 +176,25 @@ void Center::generateCars(int n)
 // ------------------------------------------------------------
 
 // A cancelled car: status CNCL, remember WHEN, and push it on the CNCL stack.
+// TW = CT - VT - TS (the formula FT = VT + TW + TS with FT = CT). It is written here, in ONE
+// place, so every way of cancelling gives the same result. Only the missing part is added,
+// so calling it twice would not count the waiting time twice.
 void Center::cancelCar(Car* c)
 {
     c->setStatus(CNCL);
     c->setCancelTime(timestep);                  // FT = CT for a cancelled car
+    c->addWaitTime(timestep - c->getVT() - c->getTS() - c->getTW());
     if (!Cancelled_cars.push(c))
         std::cout << "ERROR: Cancelled_cars stack is full!\n";   // the lab stack has a fixed size
 }
 
 // A finished car: status FNSH, remember WHEN, and push it on the FNSH stack.
+// TW = FT - VT - TS, so that FT = VT + TW + TS.
 void Center::finishCar(Car* c)
 {
     c->setStatus(FNSH);
     c->setFinishTime(timestep);
+    c->addWaitTime(timestep - c->getVT() - c->getTS() - c->getTW());
     if (!Finished_cars.push(c))
         std::cout << "ERROR: Finished_cars stack is full!\n";
 }
@@ -199,99 +257,148 @@ void Center::sendToRandomWait(Car* c)
     }
 }
 
-// Step 2.3 needs a random LATE car that is NOT the first one.
-// CancelRandomCar() may pick the first one, so the first car is taken out of the
-// way, a random car is cancelled from the rest, and the first car is put back in front.
-// (Cost: O(n), because of the rotation.)
-void Center::cancelRandomLateNotTop()
-{
-    Car* top;
-    if (!LATE_cars.dequeue(top)) return;         // LATE is empty: nothing to do
-
-    Car* victim = LATE_cars.CancelRandomCar();   // nullptr if the list only had one car
-    if (victim) cancelCar(victim);
-
-    // put the old top car back in front: add it at the back, then rotate the others behind it
-    int rest = LATE_cars.getCount();
-    LATE_cars.enqueue(top);
-    Car* c;
-    for (int i = 0; i < rest; i++)
-    {
-        LATE_cars.dequeue(c);
-        LATE_cars.enqueue(c);
-    }
-}
-
 // ------------------------------------------------------------
 //  The simulation steps
-//  They are called in this order by simulate(), once per timestep.
+//  They are called in this order by run(), once per timestep.
 // ------------------------------------------------------------
 
-// 2.1  Top 50 cars of IDLE are distributed randomly on LATE, ERLY and REDY.
+// ===== MEMBER 1: the arrival rules =========================================
+
+// 1. IDLE check: every car whose arrival time VT has come leaves IDLE.
+//      VT <  PT  -> ERLY   (early, sorted by PT)
+//      VT >  PT  -> LATE   (late, in arrival order)
+//      VT == PT  -> REDY   (on time)
+//    IDLE is sorted by VT, so only the front has to be looked at.
+//    ("<=" instead of "==": a car can never get stuck in IDLE if its VT was somehow missed.)
+//    BONUS: a remote car waits for a rescue van, and a VIP car goes straight to the VIP ready list.
 void Center::step_IdleToLists()
 {
-    for (int i = 0; i < 50; i++)
+    Car* c;
+    while (IDLE_cars.peek(c) && c->getVT() <= timestep)
     {
-        Car* c;
-        if (!IDLE_cars.dequeue(c)) break;        // IDLE is empty: stop early
+        IDLE_cars.dequeue(c);
 
-        // BONUS: a remote car waits for a rescue van; a VIP car skips ERLY / LATE and goes
-        // straight to its own priority list of ready cars
-        if (c->getDistance() > 0)
+        if (c->getDistance() > 0)                // BONUS: remote car
         {
             c->setStatus(RMOT);
             RMOT_cars.enqueue(c);
-            continue;                            // go to the next car
+            continue;
         }
-        if (c->getVIPLevel() > 0)
+        if (c->getVIPLevel() > 0)                // BONUS: VIP car
         {
             c->setStatus(REDY);
             VIP_REDY.enqueue(c, vipPriority(c->getVIPLevel(), timestep));
             continue;
         }
 
-        switch (rand() % 3)                      // a random list, one third each
+        if (c->getVT() < c->getPT())
         {
-        case 0:  c->setStatus(LATE); LATE_cars.enqueue(c);   break;
-        case 1:  c->setStatus(ERLY); ERLY_cars.InsertCar(c); break;   // sorted by PT
-        default: c->setStatus(REDY); REDY_cars.enqueue(c);   break;
+            c->setStatus(ERLY);
+            ERLY_cars.InsertCar(c);              // sorted by PT
+        }
+        else if (c->getVT() > c->getPT())
+        {
+            if (LATE_cars.isEmpty()) onTimeSinceLate = 0;   // this late car starts counting from now
+            c->setStatus(LATE);
+            LATE_cars.enqueue(c);
+        }
+        else
+        {
+            c->setStatus(REDY);
+            REDY_cars.enqueue(c);
+            onTimeArrived++;                     // used by the ERLY rule
+            onTimeSinceLate++;                   // used by the LATE rule
         }
     }
 }
 
-// 2.2  Top 6 cars of ERLY move to REDY.
+// 2. ERLY -> REDY
+//    a) an early car cannot enter REDY before its appointment time: it moves when PT <= timestep
+//       (ERLY is sorted by PT, so only the front has to be looked at)
+//    b) BUT if REDY is empty AND no on-time car arrived at this timestep, up to 3 cars from the
+//       top of ERLY move to REDY (so the diagnosis units do not stay idle)
 void Center::step_ErlyToRedy()
 {
-    for (int i = 0; i < 6; i++)
+    Car* c; int pri;
+
+    while (ERLY_cars.peek(c, pri) && c->getPT() <= timestep)
     {
-        Car* c; int pri;
-        if (!ERLY_cars.dequeue(c, pri)) break;   // ERLY is a priority queue, so dequeue also gives the priority
+        ERLY_cars.dequeue(c, pri);
         c->setStatus(REDY);
         REDY_cars.enqueue(c);
+        onTimeArrived++;                         // it arrives on time, at its appointment time
+        onTimeSinceLate++;
+    }
+
+    if (REDY_cars.isEmpty() && onTimeArrived == 0)
+    {
+        for (int i = 0; i < 3 && ERLY_cars.dequeue(c, pri); i++)
+        {
+            c->setStatus(REDY);
+            REDY_cars.enqueue(c);
+        }
     }
 }
 
-// 2.3  With probability 10%, one random LATE car is cancelled.
-void Center::step_CancelLate()
-{
-    if (chance(10))
-        cancelRandomLateNotTop();
-}
-
-// 2.4  Top 6 cars of LATE move to REDY.
+// 3. LATE -> REDY
+//    A late car must wait for 3 on-time cars to enter REDY before it moves to REDY.
+//    At most 2 late cars move in one timestep, the others wait for the next one.
+//    onTimeSinceLate counts the on-time cars that entered REDY while late cars were waiting:
+//    every 3 of them release the car at the front of LATE.
+//    SPECIAL CASE: when IDLE and ERLY are both empty, no on-time car can arrive any more, so the
+//    late cars would wait for ever (the simulation would never end). They are released anyway
+//    (still at most 2 per timestep).
 void Center::step_LateToRedy()
 {
-    for (int i = 0; i < 6; i++)
+    Car* c;
+    int moved = 0;
+    bool noMoreOnTime = IDLE_cars.isEmpty() && ERLY_cars.isEmpty();
+    while (moved < 2 && (onTimeSinceLate >= 3 || noMoreOnTime) && LATE_cars.dequeue(c))
     {
-        Car* c;
-        if (!LATE_cars.dequeue(c)) break;
         c->setStatus(REDY);
         REDY_cars.enqueue(c);
+        if (onTimeSinceLate >= 3) onTimeSinceLate -= 3;
+        moved++;
     }
+    if (LATE_cars.isEmpty()) onTimeSinceLate = 0;   // nobody is waiting, so there is nothing to count
 }
 
-// 2.5 / 2.6  Every free diagnosis bay takes one car from REDY. Diagnosis lasts DIAG_TIME steps.
-// The loop ends when there is no free bay or no ready car ("if there is no car/bay, move on").
+// ===== MEMBER 3: cancellation and rescheduling (Member 1 only calls them) =========
+
+// LATE cancellation: with probability Pcancel, a RANDOM late car (not only the first one)
+// leaves: status CNCL, CT = FT = current timestep (cancelCar does it).
+void Center::step_CancelLate()
+{
+    if (LATE_cars.isEmpty() || !chance(Pcancel)) return;
+    Car* victim = LATE_cars.CancelRandomCar();   // only takes the car out of LATE
+    if (victim) cancelCar(victim);
+}
+
+// ERLY rescheduling: with probability Presc, a RANDOM early car moves its appointment:
+//   PT_new > PT_old  and  VT_new > current timestep, and the car goes back to IDLE (sorted by VT).
+// This runs AFTER step_ErlyToRedy, so every car still in ERLY has PT > timestep.
+// VT_new is chosen between timestep + 1 and PT_new, so the car is still early or on time.
+void Center::step_RescheduleEarly()
+{
+    if (ERLY_cars.isEmpty() || !chance(Presc)) return;
+    Car* c = ERLY_cars.RemoveRandomCar();
+    if (!c) return;
+
+    int newPT = c->getPT() + 1 + rand() % 20;
+    int span = newPT - timestep;                 // >= 1
+    if (span < 1) span = 1;
+    int newVT = timestep + 1 + rand() % span;
+
+    c->setPT(newPT);
+    c->setVT(newVT);
+    c->setStatus(IDLE);                          // it has not arrived yet
+    IDLE_cars.InsertCar(c);                      // keeps IDLE sorted by VT
+}
+
+// ===== MEMBER 2: diagnosis and service ===========================================
+
+// Every free diagnosis bay takes one car from REDY. Diagnosis lasts DD timesteps (read from the
+// input file for every car). The loop ends when there is no free bay or no ready car.
 void Center::step_RedyToDiag()
 {
     while (!Free_D_List.isEmpty() && (!VIP_REDY.isEmpty() || !REDY_cars.isEmpty()))
@@ -312,8 +419,9 @@ void Center::step_RedyToDiag()
     }
 }
 
-// 2.7  Cars that finished diagnosis: 20% are cancelled, the others go to a random WAIT list.
-//      Their diagnosis bay becomes free again.
+// Cars that finished diagnosis. The diagnosis unit assigns their services (at random) and their
+// bay becomes free again. Then, with probability Pcancel, the car cancels (it cannot afford the
+// services); the others go to the WAIT list of their next service.
 // Only the FRONT of the priority queue is looked at w the cars are sorted by finish
 // time, so as soon as the front car is not finished, none of the others are.
 void Center::step_DiagToWait()
@@ -323,11 +431,12 @@ void Center::step_DiagToWait()
     {
         DIAG_Cars.dequeue(c, pri);
         releaseBay(c);
-        if (chance(20))
-        {
-            c->addWaitTime(timestep - c->getVT() - c->getTS());   // salma: TW = CT - VT - TS
-            cancelCar(c);
-        }
+
+        if (!c->isCombo() && !c->hasMoreServices())
+            generateServices(c);                 // (random mode: the services already exist)
+
+        if (chance(Pcancel))
+            cancelCar(c);                        // CT = FT = now, TW is set inside cancelCar
         else
             sendToWaitList(c);                   // salma: SS / FS routing
     }
@@ -389,13 +498,11 @@ void Center::startService(Car* c, Bay* b, int dur)
     InServ_cars.enqueue(c, -(timestep + dur));   // earliest finish = highest priority
 }
 
-// 2.8 / 2.9  6 tries: a random bay type is chosen (MB 60%, EB 30%, WB 10%). If a car is waiting
-//            for it AND a bay of that type is free, the car moves into the bay and into
-//            InServ_cars. Otherwise the car is NOT taken from its WAIT list. Service lasts SERV_TIME.
-
+// Every free bay takes the first waiting car of its own type (FCFS; VIP list first).
+// The car's service of that type is removed from its list and lasts its own duration.
 void Center::step_WaitToServ()
 {
-    Car* c; int pri; int dur; ServiceType type;
+    Car* c; int pri; int dur;
 
     // Mechanical bays: every free MB takes the first waiting car (VIP list first, then FCFS)
     while (!Free_MU_List.isEmpty() && (!VIP_WaitMU.isEmpty() || !WaitMU.isEmpty()))
@@ -429,12 +536,12 @@ void Center::step_WaitToServ()
     }
 }
 
-// 2.10  Cars that finished service: 40% are finished (FNSH), the others wait for their
-//       next service in a random WAIT list. Their bay becomes available again.
+// Cars that finished service. If it was the car's last service it is finished (FNSH),
+// otherwise it goes back to a WAIT list for its next service. Its bay becomes available again.
 void Center::step_ServToFinish()
 {
     Car* c; int pri;
-    while (InServ_cars.peek(c, pri) && -pri <= timestep)   // same "look at the front only" idea as step 2.7
+    while (InServ_cars.peek(c, pri) && -pri <= timestep)   // same "look at the front only" idea as step_DiagToWait
     {
         InServ_cars.dequeue(c, pri);
         int dur = -pri - c->getBayEntryTime();   // finish time - entry time = real service duration
@@ -442,10 +549,7 @@ void Center::step_ServToFinish()
         releaseBay(c);
         // a combo car has only one (combined) service, so it leaves when it is done
         if (c->isCombo() || !c->hasMoreServices())
-        {
-            c->addWaitTime(timestep - c->getVT() - c->getTS());   // TW = FT - VT - TS
-            finishCar(c);
-        }
+            finishCar(c);                        // FT = now, TW = FT - VT - TS is set inside finishCar
         else
             sendToWaitList(c);                   // next service: SS / FS routing
     }
@@ -454,7 +558,7 @@ void Center::step_ServToFinish()
 
 // COMBO: the repair starts only when a Mechanical Bay AND an Electrical Bay are free at the
 // same timestep. The car takes both (it points to both) and leaves when the service ends.
-// This runs before the normal assignment of step 2.8, so single-bay cars cannot starve it.
+// This runs before the normal assignment of step_WaitToServ, so single-bay cars cannot starve it.
 void Center::step_Combo()
 {
     while (!WaitCombo.isEmpty() && !Free_MU_List.isEmpty() && !Free_EU_List.isEmpty())
@@ -534,53 +638,80 @@ void Center::checkNoCarLost()
     }
 }
 
-
-//  The Phase 1 random simulation
-
-void Center::simulate(int numCars, bool interactive)
+// ------------------------------------------------------------
+//  End condition: every car is in FNSH or CNCL
+// ------------------------------------------------------------
+bool Center::allDone()
 {
-    generateCars(numCars);                       // 1000 cars by default, all in IDLE
+    return Finished_cars.GetCount() + Cancelled_cars.GetCount() == totalCars;
+}
+
+// ------------------------------------------------------------
+//  The simulation (Member 1): the main loop
+//  The cars are already in IDLE (loadCar for an input file, or generateCars in random mode).
+// ------------------------------------------------------------
+void Center::run(bool interactive)
+{
     UI ui;
+    const int MAX_STEPS = 100000;                // safety net: a stuck simulation must not run forever
 
-    const int MAX_STEPS = 10000;
-    int fnsh = 0, cncl = 0;
-
-    while (timestep < MAX_STEPS)
+    if (totalCars == 0)
     {
-        timestep++;
+        std::cout << "No cars to simulate.\n";
+        return;
+    }
 
+    timestep = 1;                                // the counter starts at 1
+    while (timestep <= MAX_STEPS)
+    {
+        onTimeArrived = 0;                       // counted again in every timestep
 
-        step_IdleToLists();      // 2.1
-        step_ErlyToRedy();       // 2.2
-        step_CancelLate();       // 2.3
-        step_LateToRedy();       // 2.4
-        step_RedyToDiag();       // 2.5, 2.6
-        step_DiagToWait();       // 2.7
-        step_Combo();            // combo cars first (they need two bays at once)
-        step_WaitToServ();       // 2.8, 2.9
-        step_ServToFinish();     // 2.10
-        step_RescueReturn();     // vans that are back
-        step_RescueDispatch();   // free vans leave for remote cars
+        step_IdleToLists();      // 1. IDLE -> ERLY / LATE / REDY (VT reached)
+        step_ErlyToRedy();       // 2. ERLY -> REDY (PT reached, or the "REDY is empty" rule)
+        step_LateToRedy();       // 3. LATE -> REDY (after 3 on-time cars, max 2 per step)
+        step_CancelLate();       // 4. Member 3: a random LATE car cancels   (probability Pcancel)
+        step_RescheduleEarly();  // 5. Member 3: a random ERLY car reschedules (probability Presc)
+        step_RedyToDiag();       // 6. Member 2: REDY -> free diagnosis bays
+        step_DiagToWait();       //    Member 2: diagnosis done -> WAIT list (or Pcancel -> CNCL)
+        step_Combo();            //    bonus: combo cars first (they need two bays at once)
+        step_WaitToServ();       //    Member 2: WAIT -> free service bays
+        step_ServToFinish();     //    Member 2: service done -> next WAIT list or FNSH
+        step_RescueReturn();     //    bonus: vans that are back
+        step_RescueDispatch();   //    bonus: free vans leave for remote cars
 
         checkNoCarLost();        // no car may disappear or appear
 
-        if (interactive)         // 2.11: print everything, then wait for a key
+        if (interactive)         // Member 4: print everything, then wait for a key
         {
             ui.printAll(timestep, IDLE_cars, ERLY_cars, LATE_cars, REDY_cars,
                 Free_D_List, DIAG_Cars, WaitMU, WaitEU, WaitWU,
                 Free_MU_List, Free_EU_List, Free_WU_List,
-                InServ_cars, Cancelled_cars, Finished_cars);                 // 2.11
+                InServ_cars, Cancelled_cars, Finished_cars);
             ui.printBonus(VIP_REDY, VIP_WaitMU, VIP_WaitEU, VIP_WaitWU,
                 WaitCombo, RMOT_cars, RESC_Cars, Free_RB_List);
             ui.waitForKey();
         }
 
-        fnsh = Finished_cars.GetCount();
-        cncl = Cancelled_cars.GetCount();
-        if (fnsh + cncl == totalCars)           // stop: all cars are in FNSH or CNCL
+        if (allDone())                           // stop: all cars are in FNSH or CNCL
             break;
+        timestep++;
     }
 
+    int fnsh = Finished_cars.GetCount();
+    int cncl = Cancelled_cars.GetCount();
+
+    if (!allDone())
+    {
+        // The simulation did not end: some cars are stuck. This shows where they are.
+        std::cout << "\nWARNING: stopped after " << MAX_STEPS << " timesteps, cars are stuck.\n"
+            << "IDLE " << IDLE_cars.GetCount() << ", ERLY " << ERLY_cars.GetCount()
+            << ", LATE " << LATE_cars.GetCount() << ", REDY " << REDY_cars.GetCount()
+            << ", DIAG " << DIAG_Cars.GetCount() << ", WAIT "
+            << WaitMU.GetCount() + WaitEU.GetCount() + WaitWU.GetCount()
+            << ", SERV " << InServ_cars.GetCount() << "\n";
+    }
+
+    // Member 3: computeStatistics() goes here.   Member 4: the output file is written here.
 
     cout << "\n===== Simulation finished =====\n"
         << "Timesteps : " << timestep << "\n"
@@ -591,4 +722,12 @@ void Center::simulate(int numCars, bool interactive)
         << (fnsh + cncl == totalCars ? "YES" : "NO") << "\n";
     cout << "Bonus cars: " << numVIP << " VIP, " << numCombo << " COMBO, "
         << numRemote << " remote (rescued by " << N_RB << " vans)\n";
+}
+
+// Random mode (no input file): create the random cars, then run the same simulation.
+// Kept so main.cpp (center.simulate(numCars, interactive)) still works.
+void Center::simulate(int numCars, bool interactive)
+{
+    generateCars(numCars);
+    run(interactive);
 }

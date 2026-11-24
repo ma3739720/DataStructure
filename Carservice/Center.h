@@ -81,7 +81,9 @@ class Center
     int timestep;       // current timestep (the first timestep is 1)
     int totalCars;      // number of generated cars: used to check that no car is ever lost
 
-    int  numVIP, numCombo, numRemote;   // how many cars of each bonus kind were generated
+    int  numVIP, numCombo, numRemote; // how many cars of each bonus kind were generated
+    int Pcancel, Presc;
+    int onTimeArrived, onTimeSinceLate;
 
     // ---------------- helpers ----------------
     void createBays();                        // creates every bay once and puts it in its free list
@@ -141,4 +143,10 @@ public:
     int getTotalCars() const { return totalCars; }
     int getFinishedCount() { return Finished_cars.GetCount(); }
     int getCancelledCount() { return Cancelled_cars.GetCount(); }
+    void configure(int nDU, int nMU, int nEU, int nWU, int washCap, int pcancel, int presc);
+    void loadCar(int cid, int pt, int vt, int dd);
+    void run(bool interactive);
+    bool allDone();
+    void generateServices(Car* c);
+    void step_RescheduleEarly();
 };
